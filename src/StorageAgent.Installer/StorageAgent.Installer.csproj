@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>StorageAgent.Installer</AssemblyName>
+    <PackageId>StorageAgent.Installer</PackageId>
+    <Description>Install, update, and uninstall the Storage Agent Windows service.</Description>
+  </PropertyGroup>
+</Project>

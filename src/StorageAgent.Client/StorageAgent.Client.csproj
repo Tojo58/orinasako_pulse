@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>StorageAgent.Client</PackageId>
+    <Description>Named-pipe client for Storage Agent.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../StorageAgent.Contracts/StorageAgent.Contracts.csproj" />
+  </ItemGroup>
+</Project>

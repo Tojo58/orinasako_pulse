@@ -1,0 +1,53 @@
+# Storage Agent
+
+Storage Agent is an MIT-licensed, standalone Windows service for read-only disk inventory and health diagnostics. It collects what the Windows storage stack and the hardware driver expose, keeps an encrypted local snapshot, and can optionally send it to one or more compatible servers.
+
+The agent works without an Internet connection or remote account. Remote connections are initiated by the service over HTTPS; Windows does not need an inbound firewall rule or listening TCP port. The service never runs a shell command or PowerShell for disk diagnostics.
+
+## Components
+
+- `StorageAgent.Service`: Windows service; native storage collection, scheduling, named-pipe server, optional outbound protocol client and DPAPI-protected queue.
+- `StorageAgent.Client`: .NET SDK for local named-pipe consumers.
+- `storageagent`: CLI for pairing, status, synchronization, logs and disconnection.
+- `StorageAgent.Installer`: install, update and uninstall operations for administrators.
+- `StorageAgent.Contracts`: versioned local IPC and remote protocol DTOs.
+- `StorageAgent.Core`: native Windows storage collection and protocol parsers.
+
+No project requires a business application. The service uses the Windows Storage APIs and read-only ATA/NVMe/SCSI pass-through where the active driver and controller permit it. USB bridges, RAID controllers, virtual disks and vendor drivers can hide or translate SMART data; such metrics are reported unavailable instead of guessed.
+
+## Build and test
+
+Requires the .NET SDK selected by `global.json`.
+
+```sh
+dotnet restore StorageAgent.slnx
+dotnet build StorageAgent.slnx --no-restore
+dotnet test StorageAgent.slnx --no-build
+```
+
+These commands compile on Linux for static review and parser tests. The Windows service, DPAPI, named pipes, Service Control Manager installation, physical SMART collection and hardware compatibility must be validated on Windows. A passing cross-platform build does not claim hardware support.
+
+## Install and use
+
+Run the packaged installer as an elevated Windows administrator. Installation creates `StorageAgent` as an automatic Windows service and protects its ProgramData with ACLs for SYSTEM and Administrators. Uninstall preserves the encrypted connection vault and identity data unless `--remove-data` is explicitly specified.
+
+```text
+storageagent status
+storageagent connect --server https://inventory.example/api/storage-agent/v1
+storageagent connections list
+storageagent sync
+storageagent logs 100
+storageagent disconnect <connection-id>
+```
+
+`connect` asks for the temporary one-time code without echoing it or placing it in shell history/arguments. An administrator must approve connection changes. The agent stores per-server access/refresh credentials and pending deliveries with machine-scoped Windows DPAPI. Tokens are never included in the CLI output or logs.
+
+## Remote protocol
+
+Any backend can implement the versioned protocol using the [OpenAPI document](docs/openapi.yaml). The `--server` value is the exact HTTPS protocol root (conventionally `/api/storage-agent/v1`); it may be mounted at another path by the server. Enrollment codes are created by the server's authenticated administrative interface; the operator enters the code in the local CLI. The backend redeems the code once, issues a connection-scoped token pair and binds the pseudonymous agent ID to server-side authorization. The agent sends snapshots/events, retrieves only documented read-only diagnostic requests, rotates tokens and retries queued data after outages.
+
+See [protocol and server integration](docs/protocol.md), [architecture](docs/architecture.md), [hardware support](docs/hardware-support.md), and the [ASP.NET minimal API integration example](examples/server-dotnet/README.md).
+
+## Privacy
+
+Raw disk serials and Windows paths are used only during local mapping. They are not included in shared protocol contracts. The remote identity is a machine-local HMAC pseudonym and each server receives its own connection ID and authorization. An administrator can inspect the public contract before pairing and can revoke a server connection from the local CLI.

@@ -1,0 +1,70 @@
+name: Storage Agent CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore StorageAgent.slnx
+      - name: Build
+        run: dotnet build StorageAgent.slnx --configuration Release --no-restore
+      - name: Test
+        run: dotnet test StorageAgent.slnx --configuration Release --no-build --no-restore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore StorageAgent.slnx
+      - name: Publish Windows service payload
+        run: dotnet publish src/StorageAgent.Service/StorageAgent.Service.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/payload
+      - name: Publish CLI into service payload
+        run: dotnet publish src/StorageAgent.Cli/StorageAgent.Cli.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/payload
+      - name: Publish installer
+        run: dotnet publish src/StorageAgent.Installer/StorageAgent.Installer.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/installer
+      - name: Pack local SDK packages
+        run: |
+          dotnet pack src/StorageAgent.Contracts/StorageAgent.Contracts.csproj --configuration Release --output artifacts/package/nuget
+          dotnet pack src/StorageAgent.Client/StorageAgent.Client.csproj --configuration Release --output artifacts/package/nuget
+      - name: Prepare release bundle
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE -Destination artifacts/package
+          Copy-Item docs -Destination artifacts/package/docs -Recurse
+          Compress-Archive -Path artifacts/package/* -DestinationPath "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip"
+      - name: Publish NuGet packages when a publisher key is configured
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
+            Get-ChildItem artifacts/package/nuget/*.nupkg | ForEach-Object {
+              dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+            }
+          }
+      - name: Publish GitHub release bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip" --generate-notes

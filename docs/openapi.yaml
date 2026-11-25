@@ -1,0 +1,620 @@
+openapi: 3.1.2
+info:
+  title: Storage Agent Remote Protocol
+  version: 1.0.0
+  description: >-
+    Application-neutral HTTPS protocol for pairing Windows storage agents,
+    receiving pseudonymous hardware inventory and issuing bounded read-only
+    diagnostics. Enrollment administration is authenticated by the consuming
+    server's own session system.
+servers:
+  - url: https://{host}/api/storage-agent/v1
+    variables:
+      host:
+        default: inventory.example
+tags:
+  - name: enrollment
+  - name: agents
+  - name: commands
+security: []
+paths:
+  /enrollments:
+    post:
+      tags: [enrollment]
+      operationId: createEnrollment
+      summary: Create a one-time pairing code from the consuming server UI
+      security:
+        - serverAdminSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnrollmentRequest'
+      responses:
+        '201':
+          description: Code returned once to the authorized operator
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Enrollment'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /enrollments/{enrollmentId}:
+    delete:
+      tags: [enrollment]
+      operationId: cancelEnrollment
+      security:
+        - serverAdminSession: []
+      parameters:
+        - $ref: '#/components/parameters/EnrollmentId'
+      responses:
+        '204': {description: Enrollment cancelled; operation is idempotent}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /agents/enroll:
+    post:
+      tags: [enrollment]
+      operationId: redeemEnrollment
+      summary: Consume a one-time code and issue credentials for one server
+      description: >-
+        `requestId` is a bounded recovery key. A retry with the same code,
+        agentId, and requestId returns credentials for the same connection and
+        invalidates any earlier response that may have been lost. Different
+        request IDs cannot consume the same code.
+      x-codeSamples:
+        - lang: cURL
+          source: |
+            curl --fail-with-body https://inventory.example/api/storage-agent/v1/agents/enroll \
+              -H 'content-type: application/json' \
+              --data '{"requestId":"8a6e81e...","enrollmentCode":"<entered securely>","agentId":"<pseudonymous id>","protocolMajor":1,"protocolMinor":0,"agentVersion":"1.0.0"}'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollAgentRequest'
+      responses:
+        '200':
+          description: Code consumed; credentials issued for this server only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentTokenResponse'
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {description: Code already consumed or agent already linked to a different resource}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /tokens/refresh:
+    post:
+      tags: [agents]
+      operationId: refreshCredentials
+      description: >-
+        The previous refresh token may be retried with the same requestId only
+        during a short recovery window. Each retry returns a new active pair and
+        invalidates an unconfirmed pair from an earlier response. Agents must
+        persist the requestId in their encrypted local vault before sending and
+        reuse it with the previous token until the returned pair is persisted.
+        Never log or store tokens in plaintext.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Fresh credentials; refresh token rotation is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /tokens/revoke:
+    post:
+      tags: [agents]
+      operationId: revokeCredentials
+      description: Idempotently revoke the refresh grant and all associated access tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeRequest'
+      responses:
+        '204': {description: Grant is revoked or already invalid}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /agents/{agentId}/snapshots/{deliveryId}:
+    put:
+      tags: [agents]
+      operationId: putSnapshot
+      security:
+        - agentAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/DeliveryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnapshotEnvelope'
+      responses:
+        '204': {description: Snapshot accepted or delivery already recorded}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {description: Payload too large}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /agents/{agentId}/events:
+    post:
+      tags: [agents]
+      operationId: postEvents
+      security:
+        - agentAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventBatch'
+      responses:
+        '200':
+          description: Accepted event IDs; repeating an ID creates no duplicate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAcknowledgement'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {description: Payload too large}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /agents/{agentId}/commands:
+    get:
+      tags: [commands]
+      operationId: pollCommands
+      summary: Poll for bounded read-only diagnostics
+      security:
+        - agentAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: waitSeconds
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, maximum: 10, default: 5}
+      responses:
+        '200':
+          description: A bounded batch of unexpired diagnostic commands
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandBatch'
+        '204': {description: No pending command}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /agents/{agentId}/commands/{commandId}/result:
+    put:
+      tags: [commands]
+      operationId: putCommandResult
+      security:
+        - agentAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: commandId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandResult'
+      responses:
+        '204': {description: Result accepted; repeated result is idempotent}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {description: Payload too large}
+
+components:
+  securitySchemes:
+    serverAdminSession:
+      type: apiKey
+      in: cookie
+      name: server_session
+      description: Placeholder for the consuming application's authenticated operator session and resource permission.
+    agentAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Short-lived opaque token scoped to one agent, one server and the authorized resource.
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[A-F0-9]{40}$'}
+    DeliveryId:
+      name: deliveryId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    EnrollmentId:
+      name: enrollmentId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    InvalidRequest:
+      description: Invalid, unsupported or expired request
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProtocolError'}
+    Unauthorized:
+      description: Missing, expired, revoked or invalid credentials
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProtocolError'}
+    Forbidden:
+      description: Credential does not authorize this agent/resource/action
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProtocolError'}
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProtocolError'}
+    RateLimited:
+      description: Request is rate limited; agent honors Retry-After
+      headers:
+        Retry-After:
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProtocolError'}
+  schemas:
+    CreateEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [resourceRef]
+      properties:
+        resourceRef:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Opaque server-owned resource reference; never interpreted by the agent.
+        label: {type: string, maxLength: 120}
+    Enrollment:
+      type: object
+      additionalProperties: false
+      required: [enrollmentId, code, expiresAt]
+      properties:
+        enrollmentId: {type: string, format: uuid}
+        code: {type: string, minLength: 20, maxLength: 256, writeOnly: true}
+        expiresAt: {type: string, format: date-time}
+    EnrollAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, enrollmentCode, agentId, protocolMajor, protocolMinor, agentVersion]
+      properties:
+        requestId: {type: string, format: uuid}
+        enrollmentCode: {type: string, minLength: 20, maxLength: 256, writeOnly: true}
+        agentId: {$ref: '#/components/schemas/AgentId'}
+        protocolMajor: {type: integer, const: 1}
+        protocolMinor: {type: integer, minimum: 0}
+        agentVersion: {type: string, maxLength: 32}
+    EnrollmentTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [connectionId, agentId, accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt]
+      properties:
+        connectionId: {type: string, format: uuid}
+        agentId: {$ref: '#/components/schemas/AgentId'}
+        accessToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+        refreshToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+        accessTokenExpiresAt: {type: string, format: date-time}
+        refreshTokenExpiresAt: {type: string, format: date-time}
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt]
+      properties:
+        accessToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+        refreshToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+        accessTokenExpiresAt: {type: string, format: date-time}
+        refreshTokenExpiresAt: {type: string, format: date-time}
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, refreshToken]
+      properties:
+        requestId: {type: string, format: uuid}
+        refreshToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+    RevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, refreshToken]
+      properties:
+        requestId: {type: string, format: uuid}
+        refreshToken: {type: string, minLength: 32, maxLength: 4096, writeOnly: true}
+    SnapshotEnvelope:
+      type: object
+      additionalProperties: false
+      required: [deliveryId, agentId, snapshot]
+      properties:
+        deliveryId: {type: string, format: uuid}
+        agentId: {$ref: '#/components/schemas/AgentId'}
+        snapshot: {$ref: '#/components/schemas/StorageSnapshot'}
+    EventBatch:
+      type: object
+      additionalProperties: false
+      required: [agentId, events]
+      properties:
+        agentId: {$ref: '#/components/schemas/AgentId'}
+        events:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/StorageEvent'}
+    EventAcknowledgement:
+      type: object
+      additionalProperties: false
+      required: [acceptedEventIds]
+      properties:
+        acceptedEventIds:
+          type: array
+          maxItems: 100
+          items: {type: string, format: uuid}
+    CommandBatch:
+      type: object
+      additionalProperties: false
+      required: [commands]
+      properties:
+        commands:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/ReadOnlyCommand'}
+    ReadOnlyCommand:
+      type: object
+      additionalProperties: false
+      required: [commandId, kind, expiresAt]
+      properties:
+        commandId: {type: string, format: uuid}
+        kind: {type: string, enum: [refreshInventory, readDiskDiagnostics]}
+        deviceId: {$ref: '#/components/schemas/DeviceId'}
+        expiresAt: {type: string, format: date-time}
+    CommandResult:
+      type: object
+      additionalProperties: false
+      required: [commandId, succeeded, completedAt]
+      properties:
+        commandId: {type: string, format: uuid}
+        succeeded: {type: boolean}
+        errorCode: {type: [string, 'null'], maxLength: 80}
+        snapshot:
+          anyOf:
+            - {$ref: '#/components/schemas/StorageSnapshot'}
+            - {type: 'null'}
+        disk:
+          anyOf:
+            - {$ref: '#/components/schemas/StorageDisk'}
+            - {type: 'null'}
+        completedAt: {type: string, format: date-time}
+      oneOf:
+        - properties:
+            succeeded: {const: true}
+            snapshot: {$ref: '#/components/schemas/StorageSnapshot'}
+            disk: {type: 'null'}
+          required: [snapshot]
+        - properties:
+            succeeded: {const: true}
+            snapshot: {type: 'null'}
+            disk: {$ref: '#/components/schemas/StorageDisk'}
+          required: [disk]
+        - properties:
+            succeeded: {const: false}
+            errorCode: {type: string, minLength: 1, maxLength: 80}
+            snapshot: {type: 'null'}
+            disk: {type: 'null'}
+          required: [errorCode]
+    StorageSnapshot:
+      type: object
+      additionalProperties: false
+      required: [contractMajor, contractMinor, observedAt, disks, volumes, diagnostics]
+      properties:
+        contractMajor: {type: integer, const: 1}
+        contractMinor: {type: integer, minimum: 0}
+        observedAt: {type: string, format: date-time}
+        disks:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/StorageDisk'}
+        volumes:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/StorageVolume'}
+        diagnostics:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/StorageDiagnostic'}
+    StorageDisk:
+      type: object
+      additionalProperties: false
+      required: [id, identityConfidence, deviceNumber, name, manufacturer, model, firmware, capacityBytes, technology, transport, rotationRateRpm, health, temperatureC, warningTemperatureC, criticalTemperatureC, wearUsedPercent, lifeRemainingPercent, availableSparePercent, availableSpareThresholdPercent, powerOnHours, powerCycleCount, startStopCycleCount, reallocatedSectors, pendingSectors, uncorrectableSectors, readErrors, writeErrors, communicationErrors, mediaErrors, errorLogEntries, dataReadBytes, dataWrittenBytes, smartSupported, smartAttributes, diagnostics, observedAt]
+      properties:
+        id: {$ref: '#/components/schemas/DeviceId'}
+        identityConfidence: {type: string, enum: [hardwareId, deviceInstance, sessionOnly]}
+        deviceNumber: {type: [integer, 'null'], minimum: 0, description: Null in remote telemetry; local disk enumeration is not shared.}
+        name: {type: string, maxLength: 200}
+        manufacturer: {$ref: '#/components/schemas/MetricString'}
+        model: {$ref: '#/components/schemas/MetricString'}
+        firmware: {$ref: '#/components/schemas/MetricString'}
+        capacityBytes: {$ref: '#/components/schemas/MetricInteger'}
+        technology: {type: string, enum: [hdd, ssd, nvme, scm, unknown]}
+        transport: {type: string, enum: [ata, sata, scsi, nvme, usb, raid, sas, virtual, other, unknown]}
+        rotationRateRpm: {$ref: '#/components/schemas/MetricInteger'}
+        health: {type: string, enum: [healthy, degraded, critical, unavailable, unknown]}
+        healthBasis: {type: [string, 'null'], maxLength: 300}
+        temperatureC: {$ref: '#/components/schemas/MetricSignedInteger'}
+        warningTemperatureC: {$ref: '#/components/schemas/MetricSignedInteger'}
+        criticalTemperatureC: {$ref: '#/components/schemas/MetricSignedInteger'}
+        wearUsedPercent: {$ref: '#/components/schemas/MetricInteger'}
+        lifeRemainingPercent: {$ref: '#/components/schemas/MetricInteger'}
+        availableSparePercent: {$ref: '#/components/schemas/MetricInteger'}
+        availableSpareThresholdPercent: {$ref: '#/components/schemas/MetricInteger'}
+        powerOnHours: {$ref: '#/components/schemas/MetricDecimalString'}
+        powerCycleCount: {$ref: '#/components/schemas/MetricDecimalString'}
+        startStopCycleCount: {$ref: '#/components/schemas/MetricDecimalString'}
+        reallocatedSectors: {$ref: '#/components/schemas/MetricDecimalString'}
+        pendingSectors: {$ref: '#/components/schemas/MetricDecimalString'}
+        uncorrectableSectors: {$ref: '#/components/schemas/MetricDecimalString'}
+        readErrors: {$ref: '#/components/schemas/MetricDecimalString'}
+        writeErrors: {$ref: '#/components/schemas/MetricDecimalString'}
+        communicationErrors: {$ref: '#/components/schemas/MetricDecimalString'}
+        mediaErrors: {$ref: '#/components/schemas/MetricDecimalString'}
+        errorLogEntries: {$ref: '#/components/schemas/MetricDecimalString'}
+        dataReadBytes: {$ref: '#/components/schemas/MetricDecimalString'}
+        dataWrittenBytes: {$ref: '#/components/schemas/MetricDecimalString'}
+        smartSupported: {$ref: '#/components/schemas/MetricBoolean'}
+        smartAttributes:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/SmartAttribute'}
+        diagnostics:
+          type: array
+          maxItems: 128
+          items: {$ref: '#/components/schemas/StorageDiagnostic'}
+        observedAt: {type: string, format: date-time}
+    StorageVolume:
+      type: object
+      additionalProperties: false
+      required: [id, kind, mountPoints, capacityBytes, freeBytes, usedBytes, physicalDiskIds]
+      properties:
+        id: {$ref: '#/components/schemas/DeviceId'}
+        label: {type: 'null', description: Remote snapshots do not transmit user-defined volume labels.}
+        fileSystem: {type: [string, 'null'], maxLength: 40}
+        kind: {type: string, enum: [local, removable, network, optical, unknown]}
+        mountPoints:
+          type: array
+          maxItems: 0
+          description: Always empty in remote snapshots to prevent transmission of local paths.
+        capacityBytes: {$ref: '#/components/schemas/MetricInteger'}
+        freeBytes: {$ref: '#/components/schemas/MetricInteger'}
+        usedBytes: {$ref: '#/components/schemas/MetricInteger'}
+        physicalDiskIds:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/DeviceId'}
+        diagnostic: {type: [string, 'null'], maxLength: 300}
+    StorageEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, agentId, change]
+      properties:
+        eventId: {type: string, format: uuid}
+        agentId: {$ref: '#/components/schemas/AgentId'}
+        change: {$ref: '#/components/schemas/StorageChange'}
+    StorageChange:
+      type: object
+      additionalProperties: false
+      required: [kind, deviceId, occurredAt]
+      properties:
+        kind: {type: string, enum: [deviceArrived, deviceRemoved, healthChanged, metricsChanged]}
+        deviceId: {$ref: '#/components/schemas/DeviceId'}
+        previousHealth: {type: [string, 'null'], enum: [healthy, degraded, critical, unavailable, unknown, null]}
+        currentHealth: {type: [string, 'null'], enum: [healthy, degraded, critical, unavailable, unknown, null]}
+        occurredAt: {type: string, format: date-time}
+    StorageDiagnostic:
+      type: object
+      additionalProperties: false
+      required: [code, message, source, observedAt]
+      properties:
+        code: {type: string, maxLength: 80}
+        message: {type: string, maxLength: 300}
+        source: {type: string, maxLength: 80}
+        observedAt: {type: string, format: date-time}
+    SmartAttribute:
+      type: object
+      additionalProperties: false
+      required: [protocol, id, name, rawValueHex, normalizedValue, worstValue, thresholdValue]
+      properties:
+        protocol: {type: string, maxLength: 20}
+        id: {type: string, maxLength: 40}
+        name: {type: string, maxLength: 100}
+        rawValueHex: {$ref: '#/components/schemas/MetricString'}
+        normalizedValue: {$ref: '#/components/schemas/MetricInteger'}
+        worstValue: {$ref: '#/components/schemas/MetricInteger'}
+        thresholdValue: {$ref: '#/components/schemas/MetricInteger'}
+        interpretation: {type: [string, 'null'], maxLength: 300}
+        unit: {type: [string, 'null'], maxLength: 40}
+    MetricStatus:
+      type: string
+      enum: [available, unavailable, unsupported, error]
+    MetricString:
+      type: object
+      additionalProperties: false
+      required: [status, value, source]
+      properties:
+        status: {$ref: '#/components/schemas/MetricStatus'}
+        value: {type: [string, 'null'], maxLength: 300}
+        source: {type: string, maxLength: 80}
+        detail: {type: [string, 'null'], maxLength: 300}
+    MetricInteger:
+      type: object
+      additionalProperties: false
+      required: [status, value, source]
+      properties:
+        status: {$ref: '#/components/schemas/MetricStatus'}
+        value: {type: [integer, 'null'], minimum: 0}
+        source: {type: string, maxLength: 80}
+        detail: {type: [string, 'null'], maxLength: 300}
+    MetricSignedInteger:
+      type: object
+      additionalProperties: false
+      required: [status, value, source]
+      properties:
+        status: {$ref: '#/components/schemas/MetricStatus'}
+        value: {type: [integer, 'null']}
+        source: {type: string, maxLength: 80}
+        detail: {type: [string, 'null'], maxLength: 300}
+    MetricDecimalString:
+      type: object
+      additionalProperties: false
+      required: [status, value, source]
+      properties:
+        status: {$ref: '#/components/schemas/MetricStatus'}
+        value: {type: [string, 'null'], pattern: '^[0-9]{1,39}$'}
+        source: {type: string, maxLength: 80}
+        detail: {type: [string, 'null'], maxLength: 300}
+    MetricBoolean:
+      type: object
+      additionalProperties: false
+      required: [status, value, source]
+      properties:
+        status: {$ref: '#/components/schemas/MetricStatus'}
+        value: {type: [boolean, 'null']}
+        source: {type: string, maxLength: 80}
+        detail: {type: [string, 'null'], maxLength: 300}
+    AgentId:
+      type: string
+      pattern: '^[A-F0-9]{40}$'
+      description: Machine-local pseudonymous identifier; never a raw hardware identifier.
+    DeviceId:
+      type: string
+      pattern: '^[A-F0-9]{40}$'
+      description: HMAC pseudonym; the corresponding raw disk/volume identifier is not transmitted.
+    ProtocolError:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 80}
+        requestId: {type: string, maxLength: 80}

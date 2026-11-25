@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>StorageAgent.Service</AssemblyName>
+    <PackageId>StorageAgent.Service</PackageId>
+    <Description>Windows background service for Storage Agent.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="StorageAgent.Tests" />
+    <ProjectReference Include="../StorageAgent.Contracts/StorageAgent.Contracts.csproj" />
+    <ProjectReference Include="../StorageAgent.Core/StorageAgent.Core.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+  </ItemGroup>
+</Project>
