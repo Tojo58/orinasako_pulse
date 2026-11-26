@@ -27,6 +27,18 @@ public sealed class SystemTelemetryTests
     }
 
     [Fact]
+    public void SystemOnlyEnvelopeExplicitlyOmitsStorage()
+    {
+        var snapshot = new StorageSnapshot(1, 0, DateTimeOffset.UtcNow, [], [], []);
+        var telemetry = new SystemTelemetry(1, DateTimeOffset.UtcNow, [new(SystemCategory.Cpu, DateTimeOffset.UtcNow, [])]);
+        var envelope = new RemoteSnapshotEnvelope("delivery", "agent", snapshot, telemetry, false);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(envelope, StorageContractJson.Options));
+        Assert.False(document.RootElement.GetProperty("storageIncluded").GetBoolean());
+        Assert.Empty(document.RootElement.GetProperty("snapshot").GetProperty("disks").EnumerateArray());
+        Assert.Equal("cpu", document.RootElement.GetProperty("system").GetProperty("sections")[0].GetProperty("category").GetString());
+    }
+
+    [Fact]
     public void MissingSystemMetricIsNullNotZero()
     {
         var metric = new SystemMetric("temperature", "C", Metric<JsonElement>.Unavailable("sensor"));

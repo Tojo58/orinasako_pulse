@@ -26,9 +26,11 @@ try
             if ((args.Length != 3 && args.Length != 5) || args[1] != "--server" || (args.Length == 5 && args[3] != "--collectors"))
                 throw new ArgumentException("Usage: storageagent connect --server <https-url> [--collectors cpu,memory,...]");
             var categories = new List<SystemCategory>();
+            var includeStorage = args.Length == 3;
             if (args.Length == 5)
                 foreach (var name in args[4].Split(',', StringSplitOptions.TrimEntries))
                 {
+                    if (string.Equals(name, "storage", StringComparison.OrdinalIgnoreCase)) { includeStorage = true; continue; }
                     if (!Enum.TryParse<SystemCategory>(name, true, out var category) || !Enum.IsDefined(category) ||
                         !string.Equals(category.ToString(), name, StringComparison.OrdinalIgnoreCase))
                         throw new ArgumentException("Unknown system collector category.");
@@ -39,7 +41,7 @@ try
             try
             {
                 var connection = categories.Count == 0 ? await client.ConnectAsync(args[2], code) :
-                    await client.ConnectSystemAsync(args[2], code, categories);
+                    await client.ConnectSystemAsync(args[2], code, categories, includeStorage: includeStorage);
                 Console.WriteLine($"Connected to {connection.ServerUrl}. Connection id: {connection.ConnectionId}");
             }
             finally { code = string.Empty; }
@@ -50,7 +52,11 @@ try
             var connections = await client.ListConnectionsAsync();
             if (connections.Count == 0) { Console.WriteLine("No remote server connections are configured."); break; }
             foreach (var connection in connections)
-                Console.WriteLine($"{connection.ConnectionId}\t{connection.State}\t{connection.ServerUrl}\tlast sync: {connection.LastSyncAt?.ToLocalTime().ToString("u") ?? "never"}\t{connection.LastError ?? string.Empty}");
+            {
+                var scopes = (connection.AllowStorage == false ? Enumerable.Empty<string>() : new[] { "storage" }).Concat(
+                    (connection.SystemCategories ?? []).Select(c => c.ToString()));
+                Console.WriteLine($"{connection.ConnectionId}\t{connection.State}\t{connection.ServerUrl}\tlast sync: {connection.LastSyncAt?.ToLocalTime().ToString("u") ?? "never"}\t{connection.LastError ?? string.Empty}\tcollectors: {string.Join(",", scopes)}");
+            }
             break;
         }
         case "disconnect" when args.Length == 2:

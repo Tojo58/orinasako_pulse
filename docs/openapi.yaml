@@ -355,6 +355,9 @@ components:
         agentId: {$ref: '#/components/schemas/AgentId'}
         snapshot: {$ref: '#/components/schemas/StorageSnapshot'}
         system: {$ref: '#/components/schemas/SystemTelemetry'}
+        storageIncluded:
+          type: boolean
+          description: False when storage is not authorized or not yet available; snapshot then contains empty lists. Omitted means storage is included.
     SystemTelemetry:
       type: object
       required: [schemaVersion, observedAt, sections]
@@ -380,6 +383,7 @@ components:
                     source: {type: string}
                     status: {type: string, enum: [available, unavailable, unsupported, error]}
                     detail: {type: [string, 'null']}
+                    observedAt: {type: string, format: date-time}
                     rows:
                       type: array
                       maxItems: 32

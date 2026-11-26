@@ -186,7 +186,9 @@ internal sealed class NamedPipeServer(
             throw new InvalidDataException("A server address and one-time enrollment code are required.");
         if (request.SystemCategories is { } categories && (categories.Count > 11 || categories.Any(category => !Enum.IsDefined(category))))
             throw new InvalidDataException("Unknown or excessive system categories.");
-        return await remoteConnections.ConnectAsync(request.ServerUrl, request.EnrollmentCode, token, request.SystemCategories);
+        if (request.AllowStorage == false && request.SystemCategories is not { Count: > 0 })
+            throw new InvalidDataException("At least one collector must be authorized.");
+        return await remoteConnections.ConnectAsync(request.ServerUrl, request.EnrollmentCode, token, request.SystemCategories, request.AllowStorage);
     }
 
     private async Task<StorageResponse> DisconnectAsync(StorageRequest request, CancellationToken token)

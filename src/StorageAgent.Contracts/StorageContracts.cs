@@ -127,7 +127,8 @@ public sealed record StorageRequest(
     string? EnrollmentCode = null,
     string? ConnectionId = null,
     int? LogLines = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AllowStorage = null);
 
 public sealed record StorageResponse(
     int ContractMajor,
@@ -161,7 +162,8 @@ public sealed record RemoteConnectionInfo(
     RemoteConnectionState State,
     string? LastError,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? LastSystemSnapshotAt = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? LastSystemSnapshotAt = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AllowStorage = null);
 
 public sealed record RemoteEnrollmentRequest(
     string RequestId,
@@ -187,7 +189,8 @@ public sealed record RemoteTokenRefreshResponse(
     DateTimeOffset RefreshTokenExpiresAt);
 
 public sealed record RemoteSnapshotEnvelope(string DeliveryId, string AgentId, StorageSnapshot Snapshot,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SystemTelemetry? System = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SystemTelemetry? System = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? StorageIncluded = null);
 public sealed record RemoteChangeEnvelope(string EventId, string AgentId, StorageChange Change);
 public sealed record RemoteChangeBatch(string AgentId, IReadOnlyList<RemoteChangeEnvelope> Events);
 public sealed record RemoteCommand(

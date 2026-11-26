@@ -22,10 +22,10 @@ internal sealed class RemoteConnectionManager(
     public IReadOnlyList<RemoteConnectionInfo> List() => vault.List();
 
     public async Task<RemoteConnectionInfo> ConnectAsync(string serverUrl, string code, CancellationToken token,
-        IReadOnlyList<SystemCategory>? categories = null)
+        IReadOnlyList<SystemCategory>? categories = null, bool? allowStorage = null)
     {
         var connection = await remote.EnrollAsync(serverUrl, code, identity.CreateAgentId(serverUrl), _agentVersion, token);
-        connection = connection with { Info = connection.Info with { SystemCategories = categories is { Count: > 0 } ? categories.Distinct().ToArray() : null } };
+        connection = connection with { Info = connection.Info with { SystemCategories = categories is { Count: > 0 } ? categories.Distinct().ToArray() : null, AllowStorage = allowStorage } };
         vault.Add(connection);
         return connection.Info;
     }
@@ -59,7 +59,7 @@ internal sealed class RemoteConnectionManager(
     {
         foreach (var connection in vault.ReadAll())
         {
-            if (connection.Info.State != RemoteConnectionState.Connected) continue;
+            if (connection.Info.State != RemoteConnectionState.Connected || connection.Info.AllowStorage == false) continue;
             var specific = new RemoteChangeEnvelope(Guid.NewGuid().ToString(), connection.Info.AgentId,
                 RemoteTelemetrySanitizer.Change(change, connection.Info.ServerUrl, identity));
             var queueFull = false;
@@ -102,20 +102,25 @@ internal sealed class RemoteConnectionManager(
             if (item.Info.State != RemoteConnectionState.Connected) continue;
             try
             {
-                var latest = state.Snapshot;
+                var latest = item.Info.AllowStorage == false ? null : state.Snapshot;
                 var connection = item;
                 var telemetry = systemState?.Snapshot().Select(connection.Info.SystemCategories);
                 if (telemetry is { Sections.Count: 0 }) telemetry = null;
                 var newSystem = telemetry is not null && (connection.Info.LastSystemSnapshotAt is null || telemetry.ObservedAt > connection.Info.LastSystemSnapshotAt.Value);
-                if (latest is not null && (connection.PendingSnapshot is not null ||
-                    connection.Info.LastSnapshotAt is null || latest.ObservedAt > connection.Info.LastSnapshotAt.Value || newSystem))
+                var newStorage = latest is not null && (connection.Info.LastSnapshotAt is null ||
+                    latest.ObservedAt > connection.Info.LastSnapshotAt.Value);
+                if (connection.PendingSnapshot is not null || newStorage || newSystem)
                 {
                     if (connection.PendingSnapshot is null)
                     {
-                        var remoteSnapshot = RemoteTelemetrySanitizer.Snapshot(latest, connection.Info.ServerUrl, identity);
+                        var remoteSnapshot = latest is null
+                            ? new StorageSnapshot(StorageProtocol.Major, StorageProtocol.Minor,
+                                telemetry?.ObservedAt ?? DateTimeOffset.UtcNow, [], [], [])
+                            : RemoteTelemetrySanitizer.Snapshot(latest, connection.Info.ServerUrl, identity);
                         connection = connection with
                         {
-                            PendingSnapshot = new RemoteSnapshotEnvelope(Guid.NewGuid().ToString(), connection.Info.AgentId, remoteSnapshot, telemetry)
+                            PendingSnapshot = new RemoteSnapshotEnvelope(Guid.NewGuid().ToString(), connection.Info.AgentId, remoteSnapshot, telemetry,
+                                latest is null ? false : null)
                         };
                         vault.Update(connection.Info.ConnectionId, current => current with { PendingSnapshot = connection.PendingSnapshot });
                     }
@@ -129,7 +134,7 @@ internal sealed class RemoteConnectionManager(
                             Info = current.Info with
                             {
                                 LastSyncAt = DateTimeOffset.UtcNow,
-                                LastSnapshotAt = pending.Snapshot.ObservedAt,
+                                LastSnapshotAt = pending.StorageIncluded == false ? current.Info.LastSnapshotAt : pending.Snapshot.ObservedAt,
                                 LastSystemSnapshotAt = pending.System?.ObservedAt ?? current.Info.LastSystemSnapshotAt,
                                 LastError = null
                             }
@@ -139,7 +144,7 @@ internal sealed class RemoteConnectionManager(
                 }
 
                 connection = vault.Find(item.Info.ConnectionId)!;
-                if (connection.PendingEvents.Count > 0)
+                if (connection.Info.AllowStorage != false && connection.PendingEvents.Count > 0)
                 {
                     connection = await remote.EnsureTokenAsync(connection, token);
                     var acknowledgements = await remote.SendEventsAsync(connection,
@@ -222,6 +227,8 @@ internal sealed class RemoteConnectionManager(
     private async Task<RemoteCommandResult> ExecuteCommandAsync(RemoteCommand command,
         StoredRemoteConnection connection, CancellationToken token)
     {
+        if (connection.Info.AllowStorage == false)
+            return new RemoteCommandResult(command.CommandId, false, "command.scope_denied", null, null, DateTimeOffset.UtcNow);
         try
         {
             switch (command.Kind)

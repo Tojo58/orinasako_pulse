@@ -26,6 +26,11 @@ internal sealed class SystemMonitorService(SystemRuntimeState state, IConfigurat
 
     private async Task RunAsync(ISystemCollector collector, CancellationToken token)
     {
+        if (bool.TryParse(configuration["Monitoring:Enabled:" + collector.Category], out var enabled) && !enabled)
+        {
+            state.Set(new(collector.Category, DateTimeOffset.UtcNow, [new("collector", "configuration", MetricStatus.Unavailable, [], "Disabled by local administrator.")]));
+            return;
+        }
         var seconds = int.TryParse(configuration["Monitoring:Intervals:" + collector.Category], out var configured)
             ? Math.Clamp(configured, 5, 86400) : (int)collector.DefaultInterval.TotalSeconds;
         while (!token.IsCancellationRequested)

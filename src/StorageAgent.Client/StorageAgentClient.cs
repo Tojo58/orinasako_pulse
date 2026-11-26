@@ -53,9 +53,9 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
             enrollmentCode: enrollmentCode, timeout: TimeSpan.FromSeconds(45), token: token);
 
     public Task<RemoteConnectionInfo> ConnectSystemAsync(string serverUrl, string enrollmentCode,
-        IReadOnlyList<SystemCategory> categories, CancellationToken token = default) =>
+        IReadOnlyList<SystemCategory> categories, CancellationToken token = default, bool includeStorage = false) =>
         SendAsync<RemoteConnectionInfo>(StorageOperation.Connect, serverUrl: serverUrl, enrollmentCode: enrollmentCode,
-            timeout: TimeSpan.FromSeconds(45), token: token, systemCategories: categories);
+            timeout: TimeSpan.FromSeconds(45), token: token, systemCategories: categories, allowStorage: includeStorage);
 
     public Task<IReadOnlyList<RemoteConnectionInfo>> ListConnectionsAsync(CancellationToken token = default) =>
         SendAsync<IReadOnlyList<RemoteConnectionInfo>>(StorageOperation.ConnectionsList, token: token);
@@ -72,16 +72,16 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
 
     private async Task<T> SendAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null)
     {
         var result = await SendNullableAsync<T>(operation, deviceId, path, force, waitSeconds, timeout, token,
-            serverUrl, enrollmentCode, connectionId, logLines, systemCategories);
+            serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage);
         return result ?? throw new StorageAgentException("response.empty_payload", "The Storage Agent returned an empty response.");
     }
 
     private async Task<T?> SendNullableAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Storage Agent named pipes are available only on Windows.");
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -95,7 +95,7 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
         }
 
         var request = new StorageRequest(StorageProtocol.Major, StorageProtocol.Minor, Guid.NewGuid().ToString("N"),
-            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines, systemCategories);
+            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(request, StorageContractJson.Options);
         if (bytes.Length > StorageProtocol.MaxFrameBytes) throw new InvalidDataException("Request exceeds the local IPC frame limit.");
         var prefix = new byte[4];
