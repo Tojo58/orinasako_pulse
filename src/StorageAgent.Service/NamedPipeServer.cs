@@ -14,6 +14,7 @@ namespace StorageAgent.Service;
 
 internal sealed class NamedPipeServer(
     StorageRuntimeState state,
+    SystemRuntimeState systemState,
     StorageChangeHub changes,
     IStorageCollector collector,
     RemoteConnectionManager remoteConnections,
@@ -124,7 +125,7 @@ internal sealed class NamedPipeServer(
             return;
         }
 
-        if ((request.Operation is StorageOperation.Connect or StorageOperation.Disconnect) && !IsAdministrator(pipe))
+        if ((request.Operation is StorageOperation.Connect or StorageOperation.Disconnect or StorageOperation.SystemReport) && !IsAdministrator(pipe))
         {
             await WriteFrameAsync(pipe, StorageContractJson.Failure(request.RequestId, "access.administrator_required",
                 "Run this Storage Agent command from an elevated Administrator session."), token);
@@ -144,6 +145,7 @@ internal sealed class NamedPipeServer(
             {
                 StorageOperation.Status => StorageContractJson.Success(request.RequestId, state.Status(ServiceVersion)),
                 StorageOperation.Inventory => StorageContractJson.Success(request.RequestId, state.Snapshot),
+                StorageOperation.SystemReport => StorageContractJson.Success(request.RequestId, new SystemReport(state.Snapshot, systemState.Snapshot())),
                 StorageOperation.Diagnostics => Diagnostics(request),
                 StorageOperation.ResolvePath => ResolvePath(request),
                 StorageOperation.Refresh => StorageContractJson.Success(request.RequestId,
@@ -182,7 +184,9 @@ internal sealed class NamedPipeServer(
         if (string.IsNullOrWhiteSpace(request.ServerUrl) || request.ServerUrl.Length > 2048 ||
             string.IsNullOrWhiteSpace(request.EnrollmentCode) || request.EnrollmentCode.Length > 256)
             throw new InvalidDataException("A server address and one-time enrollment code are required.");
-        return await remoteConnections.ConnectAsync(request.ServerUrl, request.EnrollmentCode, token);
+        if (request.SystemCategories is { } categories && (categories.Count > 11 || categories.Any(category => !Enum.IsDefined(category))))
+            throw new InvalidDataException("Unknown or excessive system categories.");
+        return await remoteConnections.ConnectAsync(request.ServerUrl, request.EnrollmentCode, token, request.SystemCategories);
     }
 
     private async Task<StorageResponse> DisconnectAsync(StorageRequest request, CancellationToken token)

@@ -6,6 +6,10 @@ The Windows service collects a bounded storage snapshot at startup, on device ch
 
 Local consumers use the versioned named pipe and .NET client. The administrative CLI talks to the same service; connection changes require an elevated administrator token. The pipe rejects remote clients. The service does not open an inbound TCP port.
 
+## System collectors
+
+See [system monitoring](system-monitoring.md) for collector isolation, local JSON access, explicit remote category permissions and hardware limitations. Native storage retains its own scheduling and cache. System observations are sampled independently and opt-in telemetry is attached to the existing outbound snapshot envelope.
+
 ## Remote operation
 
 Each remote server has an independent record, opaque access/refresh token pair, sync state and outbox. The service initiates HTTPS connections, does not follow redirects, validates server URLs, bounds response bodies, rotates credentials before expiry, and retries with exponential backoff plus `Retry-After` when provided.

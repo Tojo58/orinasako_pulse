@@ -11,7 +11,7 @@ public static class StorageProtocol
     public const int MaxFrameBytes = 1_048_576;
 }
 
-public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs }
+public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport }
 public enum MetricStatus { Available, Unavailable, Unsupported, Error }
 public enum StorageHealth { Healthy, Degraded, Critical, Unavailable, Unknown }
 public enum StorageTechnology { Hdd, Ssd, Nvme, Scm, Unknown }
@@ -126,7 +126,8 @@ public sealed record StorageRequest(
     string? ServerUrl = null,
     string? EnrollmentCode = null,
     string? ConnectionId = null,
-    int? LogLines = null);
+    int? LogLines = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null);
 
 public sealed record StorageResponse(
     int ContractMajor,
@@ -158,7 +159,9 @@ public sealed record RemoteConnectionInfo(
     DateTimeOffset? LastSyncAt,
     DateTimeOffset? LastSnapshotAt,
     RemoteConnectionState State,
-    string? LastError);
+    string? LastError,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? LastSystemSnapshotAt = null);
 
 public sealed record RemoteEnrollmentRequest(
     string RequestId,
@@ -183,7 +186,8 @@ public sealed record RemoteTokenRefreshResponse(
     DateTimeOffset AccessTokenExpiresAt,
     DateTimeOffset RefreshTokenExpiresAt);
 
-public sealed record RemoteSnapshotEnvelope(string DeliveryId, string AgentId, StorageSnapshot Snapshot);
+public sealed record RemoteSnapshotEnvelope(string DeliveryId, string AgentId, StorageSnapshot Snapshot,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SystemTelemetry? System = null);
 public sealed record RemoteChangeEnvelope(string EventId, string AgentId, StorageChange Change);
 public sealed record RemoteChangeBatch(string AgentId, IReadOnlyList<RemoteChangeEnvelope> Events);
 public sealed record RemoteCommand(

@@ -12,7 +12,8 @@ internal sealed class RemoteConnectionManager(
     MachineIdentityStore identity,
     StorageRuntimeState state,
     IStorageCollector collector,
-    ILogger<RemoteConnectionManager> logger)
+    ILogger<RemoteConnectionManager> logger,
+    SystemRuntimeState? systemState = null)
 {
     private const int MaximumQueuedChanges = 1000;
     private readonly string _agentVersion = typeof(RemoteConnectionManager).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
@@ -20,9 +21,11 @@ internal sealed class RemoteConnectionManager(
 
     public IReadOnlyList<RemoteConnectionInfo> List() => vault.List();
 
-    public async Task<RemoteConnectionInfo> ConnectAsync(string serverUrl, string code, CancellationToken token)
+    public async Task<RemoteConnectionInfo> ConnectAsync(string serverUrl, string code, CancellationToken token,
+        IReadOnlyList<SystemCategory>? categories = null)
     {
         var connection = await remote.EnrollAsync(serverUrl, code, identity.CreateAgentId(serverUrl), _agentVersion, token);
+        connection = connection with { Info = connection.Info with { SystemCategories = categories is { Count: > 0 } ? categories.Distinct().ToArray() : null } };
         vault.Add(connection);
         return connection.Info;
     }
@@ -101,15 +104,18 @@ internal sealed class RemoteConnectionManager(
             {
                 var latest = state.Snapshot;
                 var connection = item;
+                var telemetry = systemState?.Snapshot().Select(connection.Info.SystemCategories);
+                if (telemetry is { Sections.Count: 0 }) telemetry = null;
+                var newSystem = telemetry is not null && (connection.Info.LastSystemSnapshotAt is null || telemetry.ObservedAt > connection.Info.LastSystemSnapshotAt.Value);
                 if (latest is not null && (connection.PendingSnapshot is not null ||
-                    connection.Info.LastSnapshotAt is null || latest.ObservedAt > connection.Info.LastSnapshotAt.Value))
+                    connection.Info.LastSnapshotAt is null || latest.ObservedAt > connection.Info.LastSnapshotAt.Value || newSystem))
                 {
-                    if (connection.PendingSnapshot is null || connection.PendingSnapshot.Snapshot.ObservedAt < latest.ObservedAt)
+                    if (connection.PendingSnapshot is null)
                     {
                         var remoteSnapshot = RemoteTelemetrySanitizer.Snapshot(latest, connection.Info.ServerUrl, identity);
                         connection = connection with
                         {
-                            PendingSnapshot = new RemoteSnapshotEnvelope(Guid.NewGuid().ToString(), connection.Info.AgentId, remoteSnapshot)
+                            PendingSnapshot = new RemoteSnapshotEnvelope(Guid.NewGuid().ToString(), connection.Info.AgentId, remoteSnapshot, telemetry)
                         };
                         vault.Update(connection.Info.ConnectionId, current => current with { PendingSnapshot = connection.PendingSnapshot });
                     }
@@ -124,6 +130,7 @@ internal sealed class RemoteConnectionManager(
                             {
                                 LastSyncAt = DateTimeOffset.UtcNow,
                                 LastSnapshotAt = pending.Snapshot.ObservedAt,
+                                LastSystemSnapshotAt = pending.System?.ObservedAt ?? current.Info.LastSystemSnapshotAt,
                                 LastError = null
                             }
                         });

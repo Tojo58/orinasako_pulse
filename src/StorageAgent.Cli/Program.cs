@@ -1,6 +1,8 @@
 using System.Security;
 using System.Security.Cryptography;
 using StorageAgent.Client;
+using StorageAgent.Contracts;
+using System.Text.Json;
 
 if (args.Length == 0 || args[0] is "help" or "--help" or "-h")
 {
@@ -21,12 +23,23 @@ try
     {
         case "connect":
         {
-            if (args.Length != 3 || args[1] != "--server") throw new ArgumentException("Usage: storageagent connect --server <https-url>");
+            if ((args.Length != 3 && args.Length != 5) || args[1] != "--server" || (args.Length == 5 && args[3] != "--collectors"))
+                throw new ArgumentException("Usage: storageagent connect --server <https-url> [--collectors cpu,memory,...]");
+            var categories = new List<SystemCategory>();
+            if (args.Length == 5)
+                foreach (var name in args[4].Split(',', StringSplitOptions.TrimEntries))
+                {
+                    if (!Enum.TryParse<SystemCategory>(name, true, out var category) || !Enum.IsDefined(category) ||
+                        !string.Equals(category.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                        throw new ArgumentException("Unknown system collector category.");
+                    if (!categories.Contains(category)) categories.Add(category);
+                }
             Console.Write("One-time connection code (input hidden): ");
             var code = ReadSecret();
             try
             {
-                var connection = await client.ConnectAsync(args[2], code);
+                var connection = categories.Count == 0 ? await client.ConnectAsync(args[2], code) :
+                    await client.ConnectSystemAsync(args[2], code, categories);
                 Console.WriteLine($"Connected to {connection.ServerUrl}. Connection id: {connection.ConnectionId}");
             }
             finally { code = string.Empty; }
@@ -60,6 +73,9 @@ try
             if (status.LastError is not null) Console.WriteLine($"Last local collector error: {status.LastError}");
             break;
         }
+        case "system" when args.Length == 1 || (args.Length == 2 && args[1] == "--json"):
+            Console.WriteLine(JsonSerializer.Serialize(await client.GetSystemReportAsync(), StorageContractJson.Options));
+            break;
         case "logs":
         {
             var lines = args.Length == 2 && int.TryParse(args[1], out var requested) ? requested : 50;
@@ -109,6 +125,8 @@ static void PrintHelp()
     Console.WriteLine("  storageagent connections list               List independent server connections.");
     Console.WriteLine("  storageagent disconnect <connection-id>    Revoke and remove a server connection.");
     Console.WriteLine("  storageagent sync                           Send queued inventory and process safe diagnostic requests.");
+    Console.WriteLine("  storageagent system --json                  Full local system report (administrator).");
+    Console.WriteLine("  storageagent connect --server <url> --collectors cpu,memory,...   Opt into system telemetry for this server.");
     Console.WriteLine("  storageagent status                         Show service and connection status.");
     Console.WriteLine("  storageagent logs [count]                   Show recent local service logs.");
 }

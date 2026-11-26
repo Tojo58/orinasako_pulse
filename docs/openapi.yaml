@@ -354,6 +354,51 @@ components:
         deliveryId: {type: string, format: uuid}
         agentId: {$ref: '#/components/schemas/AgentId'}
         snapshot: {$ref: '#/components/schemas/StorageSnapshot'}
+        system: {$ref: '#/components/schemas/SystemTelemetry'}
+    SystemTelemetry:
+      type: object
+      required: [schemaVersion, observedAt, sections]
+      properties:
+        schemaVersion: {const: 1}
+        observedAt: {type: string, format: date-time}
+        sections:
+          type: array
+          maxItems: 11
+          items:
+            type: object
+            required: [category, observedAt, probes]
+            properties:
+              category: {type: string, enum: [cpu, memory, gpu, motherboard, network, power, thermal, operatingSystem, processes, peripherals, security]}
+              observedAt: {type: string, format: date-time}
+              probes:
+                type: array
+                items:
+                  type: object
+                  required: [name, source, status, rows]
+                  properties:
+                    name: {type: string}
+                    source: {type: string}
+                    status: {type: string, enum: [available, unavailable, unsupported, error]}
+                    detail: {type: [string, 'null']}
+                    rows:
+                      type: array
+                      maxItems: 32
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [name, reading]
+                          properties:
+                            name: {type: string}
+                            unit: {type: [string, 'null']}
+                            reading:
+                              type: object
+                              required: [status, value, source]
+                              properties:
+                                status: {type: string, enum: [available, unavailable, unsupported, error]}
+                                value: {type: [string, number, boolean, 'null']}
+                                source: {type: string}
+                                detail: {type: string}
     EventBatch:
       type: object
       additionalProperties: false

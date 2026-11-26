@@ -14,6 +14,8 @@ builder.Services.AddSingleton<IStorageCollector, WindowsDiskCollector>();
 builder.Services.AddSingleton<StorageSnapshotStore>();
 builder.Services.AddSingleton<StorageChangeHub>();
 builder.Services.AddSingleton<StorageRuntimeState>();
+builder.Services.AddSingleton<SystemRuntimeState>();
+builder.Services.AddHostedService<SystemMonitorService>();
 builder.Services.AddSingleton<ISecretProtector, WindowsDpapiSecretProtector>();
 builder.Services.AddSingleton<StorageAgent.Core.IMachineKeyProtector>(provider =>
     provider.GetRequiredService<ISecretProtector>());

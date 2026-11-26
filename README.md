@@ -4,6 +4,10 @@ Storage Agent is an MIT-licensed, standalone Windows service for read-only disk 
 
 The agent works without an Internet connection or remote account. Remote connections are initiated by the service over HTTPS; Windows does not need an inbound firewall rule or listening TCP port. The service never runs a shell command or PowerShell for disk diagnostics.
 
+## System monitoring
+
+The existing service now includes independent Windows system collectors in addition to native SMART. Run `storageagent system --json` from an elevated terminal to obtain the storage inventory and system telemetry in one JSON response. A remote server receives only storage by default; to opt into additional categories during pairing, use `storageagent connect --server https://inventory.example/api/storage-agent/v1 --collectors cpu,memory,gpu`. The backend must support the optional versioned `system` envelope property in OpenAPI before opting in. Existing connections remain storage-only; disconnect and re-enroll to change permissions. See [system monitoring](docs/system-monitoring.md).
+
 ## Components
 
 - `StorageAgent.Service`: Windows service; native storage collection, scheduling, named-pipe server, optional outbound protocol client and DPAPI-protected queue.

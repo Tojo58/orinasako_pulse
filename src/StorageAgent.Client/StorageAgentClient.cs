@@ -24,6 +24,9 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
     public Task<StorageSnapshot> GetInventoryAsync(CancellationToken token = default) =>
         SendAsync<StorageSnapshot>(StorageOperation.Inventory, timeout: _defaultTimeout, token: token);
 
+    public Task<SystemReport> GetSystemReportAsync(CancellationToken token = default) =>
+        SendAsync<SystemReport>(StorageOperation.SystemReport, token: token);
+
     public Task<StorageDisk> GetDiagnosticsAsync(string deviceId, CancellationToken token = default) =>
         SendAsync<StorageDisk>(StorageOperation.Diagnostics, deviceId: deviceId, timeout: _defaultTimeout, token: token);
 
@@ -49,6 +52,11 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
         SendAsync<RemoteConnectionInfo>(StorageOperation.Connect, serverUrl: serverUrl,
             enrollmentCode: enrollmentCode, timeout: TimeSpan.FromSeconds(45), token: token);
 
+    public Task<RemoteConnectionInfo> ConnectSystemAsync(string serverUrl, string enrollmentCode,
+        IReadOnlyList<SystemCategory> categories, CancellationToken token = default) =>
+        SendAsync<RemoteConnectionInfo>(StorageOperation.Connect, serverUrl: serverUrl, enrollmentCode: enrollmentCode,
+            timeout: TimeSpan.FromSeconds(45), token: token, systemCategories: categories);
+
     public Task<IReadOnlyList<RemoteConnectionInfo>> ListConnectionsAsync(CancellationToken token = default) =>
         SendAsync<IReadOnlyList<RemoteConnectionInfo>>(StorageOperation.ConnectionsList, token: token);
 
@@ -64,16 +72,16 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
 
     private async Task<T> SendAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null)
     {
         var result = await SendNullableAsync<T>(operation, deviceId, path, force, waitSeconds, timeout, token,
-            serverUrl, enrollmentCode, connectionId, logLines);
+            serverUrl, enrollmentCode, connectionId, logLines, systemCategories);
         return result ?? throw new StorageAgentException("response.empty_payload", "The Storage Agent returned an empty response.");
     }
 
     private async Task<T?> SendNullableAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Storage Agent named pipes are available only on Windows.");
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -87,7 +95,7 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
         }
 
         var request = new StorageRequest(StorageProtocol.Major, StorageProtocol.Minor, Guid.NewGuid().ToString("N"),
-            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines);
+            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines, systemCategories);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(request, StorageContractJson.Options);
         if (bytes.Length > StorageProtocol.MaxFrameBytes) throw new InvalidDataException("Request exceeds the local IPC frame limit.");
         var prefix = new byte[4];
