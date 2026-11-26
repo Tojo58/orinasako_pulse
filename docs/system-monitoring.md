@@ -31,15 +31,13 @@ and transmission are independent. Configure the periodic remote cycle using `Mon
 No IP/MAC addresses, usernames, process command lines, executable paths,
 device instance IDs or serial numbers are queried by the new collectors.
 Process/service and peripheral observations deliberately expose bounded
-aggregate or class/state data, not names or paths. GPU engine and NIC rows
-are anonymous, not stable per-device mappings. Security provider state codes
+aggregate or class/state data, not names or paths. GPU utilization aggregates Windows per-process engine counters transiently; no process or adapter identifiers are transmitted. Dedicated and shared GPU memory come from DXGI, not the legacy 32-bit WMI AdapterRAM. NIC rows remain anonymous. The peripherals collector reports only the total queued print jobs across local printer queues, never document names. Security provider state codes
 are raw; they are not a claim that a device is secure. Secure Boot is read from the Windows firmware-state registry value if reported.
 
 ## Validation and limitations
 
 This implementation uses Windows WMI/CIM providers for system metrics. It
-does not implement proprietary CPU/GPU sensor drivers, precise per-GPU VRAM
-above the legacy WMI AdapterRAM limit, component power measurements, actual
+does not implement proprietary CPU/GPU sensor drivers, component power measurements, actual
 fan RPM, detailed process inventory, local system time-series
 history, or system-specific remote events/refresh commands. ACPI temperatures
 are thermal-zone values, not necessarily CPU temperatures; reported fan speed

@@ -5,6 +5,6 @@ namespace StorageAgent.Collectors;
 
 internal static class PeripheralsCollectorFactory
 {
-    public static ISystemCollector Create() => new WmiCollector(SystemCategory.Peripherals, 300,
-            P("devices", "Win32_PnPEntity", F("PNPClass","deviceClass"), F("Status","status"), F("ConfigManagerErrorCode","errorCode")));
+    public static ISystemCollector Create() => new PrinterQueueCollector(new WmiCollector(SystemCategory.Peripherals, 30,
+        Inventory("devices", "Win32_PnPEntity", F("PNPClass","deviceClass"), F("Status","status"), F("ConfigManagerErrorCode","errorCode"))));
 }

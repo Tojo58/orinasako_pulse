@@ -8,6 +8,19 @@ namespace StorageAgent.Tests;
 public sealed class SystemTelemetryTests
 {
     [Fact]
+    public void GpuEngineAggregationDoesNotExposeProcessOrAdapterIdentifiers()
+    {
+        var result = GpuCollector.BusiestEngine([
+            ("pid_1_luid_0x0_0x1_phys_0_eng_0_engtype_3D", 40d),
+            ("pid_2_luid_0x0_0x1_phys_0_eng_0_engtype_3D", 35d),
+            ("pid_3_luid_0x0_0x1_phys_0_eng_1_engtype_Copy", 50d),
+            ("invalid", 100d)
+        ]);
+        Assert.Equal(75d, result);
+        Assert.Null(GpuCollector.BusiestEngine([("invalid", 50d)]));
+    }
+
+    [Fact]
     public void EverySystemCategoryHasExactlyOneCollector()
     {
         var collectors = WindowsSystemCollectors.Create();
