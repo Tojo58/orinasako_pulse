@@ -26,7 +26,7 @@ The existing HTTPS snapshot endpoint receives optional `system` data (schema
 version 1) filtered to the explicitly selected categories. Update the server
 to accept the additive OpenAPI field before opting in. The existing remote
 loop, credentials, retry and durable pending envelope are reused; collection
-and transmission are independent. Remote commands remain storage-only.
+and transmission are independent. Configure the periodic remote cycle using `Monitoring__RemoteSyncSeconds` (30–86400 seconds, default 60); storage events can trigger an earlier cycle. Remote commands remain storage-only.
 
 No IP/MAC addresses, usernames, process command lines, executable paths,
 device instance IDs or serial numbers are queried by the new collectors.

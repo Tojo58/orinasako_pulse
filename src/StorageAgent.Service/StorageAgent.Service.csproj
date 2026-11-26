@@ -10,8 +10,8 @@
     <ProjectReference Include="../StorageAgent.Contracts/StorageAgent.Contracts.csproj" />
     <ProjectReference Include="../StorageAgent.Core/StorageAgent.Core.csproj" />
     <ProjectReference Include="../StorageAgent.Collectors/StorageAgent.Collectors.csproj" />
+    <ProjectReference Include="../StorageAgent.Transport/StorageAgent.Transport.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
     <PackageReference Include="System.Management" Version="10.0.13" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
   </ItemGroup>
 </Project>

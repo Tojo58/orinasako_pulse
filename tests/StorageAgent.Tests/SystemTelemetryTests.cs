@@ -1,11 +1,20 @@
 using System.Text.Json;
 using StorageAgent.Contracts;
+using StorageAgent.Collectors;
 using StorageAgent.Service;
 
 namespace StorageAgent.Tests;
 
 public sealed class SystemTelemetryTests
 {
+    [Fact]
+    public void EverySystemCategoryHasExactlyOneCollector()
+    {
+        var collectors = WindowsSystemCollectors.Create();
+        Assert.Equal(Enum.GetValues<SystemCategory>().OrderBy(x => x).ToArray(), collectors.Select(x => x.Category).OrderBy(x => x).ToArray());
+        Assert.All(collectors, c => Assert.True(c.DefaultInterval >= TimeSpan.FromSeconds(5)));
+    }
+
     [Fact]
     public void ScopeDefaultsToNoSystemDataAndNeverIncludesOtherCategories()
     {

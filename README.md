@@ -1,6 +1,6 @@
 # Storage Agent
 
-Storage Agent is an MIT-licensed, standalone Windows service for read-only disk inventory and health diagnostics. It collects what the Windows storage stack and the hardware driver expose, keeps an encrypted local snapshot, and can optionally send it to one or more compatible servers.
+Storage Agent is an MIT-licensed, standalone Windows service for read-only system monitoring, hardware inventory and native storage health diagnostics. It collects what the Windows storage stack and the hardware driver expose, keeps an encrypted local snapshot, and can optionally send it to one or more compatible servers.
 
 The agent works without an Internet connection or remote account. Remote connections are initiated by the service over HTTPS; Windows does not need an inbound firewall rule or listening TCP port. The service never runs a shell command or PowerShell for disk diagnostics.
 
@@ -10,7 +10,9 @@ The existing service now includes independent Windows system collectors in addit
 
 ## Components
 
-- `StorageAgent.Service`: Windows service; native storage collection, scheduling, named-pipe server, optional outbound protocol client and DPAPI-protected queue.
+- `StorageAgent.Service`: Windows service; collector scheduling, runtime state, named-pipe server and remote synchronization orchestration.
+- `StorageAgent.Collectors`: independent CPU, memory, GPU, motherboard, network, power, thermal, OS, processes, peripherals and security collectors.
+- `StorageAgent.Transport`: outbound HTTPS protocol, per-destination privacy filtering and DPAPI-protected queue.
 - `StorageAgent.Client`: .NET SDK for local named-pipe consumers.
 - `storageagent`: CLI for pairing, status, synchronization, logs and disconnection.
 - `StorageAgent.Installer`: install, update and uninstall operations for administrators.

@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using StorageAgent.Contracts;
 
-namespace StorageAgent.Service;
+namespace StorageAgent.Transport;
 
 internal sealed class RemoteProtocolException(string code, string message, bool retryable = false, TimeSpan? retryAfter = null) : Exception(message)
 {

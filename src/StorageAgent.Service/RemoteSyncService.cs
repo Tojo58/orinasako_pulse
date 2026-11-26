@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StorageAgent.Contracts;
 
@@ -7,15 +8,17 @@ namespace StorageAgent.Service;
 internal sealed class RemoteSyncService(
     RemoteConnectionManager connections,
     StorageChangeHub changes,
-    ILogger<RemoteSyncService> logger) : BackgroundService
+    ILogger<RemoteSyncService> logger,
+    IConfiguration configuration) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var seconds = int.TryParse(configuration["Monitoring:RemoteSyncSeconds"], out var configured) ? Math.Clamp(configured, 30, 86400) : 60;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var change = await changes.WaitAsync(TimeSpan.FromMinutes(1), stoppingToken);
+                var change = await changes.WaitAsync(TimeSpan.FromSeconds(seconds), stoppingToken);
                 if (change is not null) connections.QueueChange(change);
                 try
                 {

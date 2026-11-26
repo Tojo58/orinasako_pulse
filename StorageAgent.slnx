@@ -2,6 +2,7 @@
   <Project Path="src/StorageAgent.Contracts/StorageAgent.Contracts.csproj" />
   <Project Path="src/StorageAgent.Core/StorageAgent.Core.csproj" />
   <Project Path="src/StorageAgent.Collectors/StorageAgent.Collectors.csproj" />
+  <Project Path="src/StorageAgent.Transport/StorageAgent.Transport.csproj" />
   <Project Path="src/StorageAgent.Client/StorageAgent.Client.csproj" />
   <Project Path="src/StorageAgent.Cli/StorageAgent.Cli.csproj" />
   <Project Path="src/StorageAgent.Service/StorageAgent.Service.csproj" />

@@ -16,5 +16,7 @@
     <ProjectReference Include="../../src/StorageAgent.Core/StorageAgent.Core.csproj" />
     <ProjectReference Include="../../src/StorageAgent.Client/StorageAgent.Client.csproj" />
     <ProjectReference Include="../../src/StorageAgent.Service/StorageAgent.Service.csproj" />
+    <ProjectReference Include="../../src/StorageAgent.Transport/StorageAgent.Transport.csproj" />
+    <ProjectReference Include="../../src/StorageAgent.Collectors/StorageAgent.Collectors.csproj" />
   </ItemGroup>
 </Project>

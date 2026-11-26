@@ -1,7 +1,7 @@
 using StorageAgent.Contracts;
 using StorageAgent.Core;
 
-namespace StorageAgent.Service;
+namespace StorageAgent.Transport;
 
 internal static class RemoteTelemetrySanitizer
 {

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using StorageAgent.Contracts;
 
-namespace StorageAgent.Service;
+namespace StorageAgent.Transport;
 
 internal sealed record StoredRemoteConnection(
     RemoteConnectionInfo Info,
