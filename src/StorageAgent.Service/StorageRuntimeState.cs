@@ -130,7 +130,7 @@ public sealed class StorageRuntimeState(StorageSnapshotStore store, StorageChang
         await _refreshGate.WaitAsync(token);
         try
         {
-            if (!force && Snapshot is { } cached && DateTimeOffset.UtcNow - _lastRefreshAt < TimeSpan.FromMinutes(15)) return cached;
+            if (!force && Snapshot is { } cached && DateTimeOffset.UtcNow - _lastRefreshAt < TimeSpan.FromMinutes(5)) return cached;
             if (force && Snapshot is { } fresh && DateTimeOffset.UtcNow - _lastRefreshAt < TimeSpan.FromSeconds(10)) return fresh;
             var previous = Snapshot;
             var next = await collector.CollectAsync(token);
@@ -153,6 +153,11 @@ public sealed class StorageRuntimeState(StorageSnapshotStore store, StorageChang
     public StorageAgentStatus Status(string version) => new(version, StorageProtocol.Major, StorageProtocol.Minor,
         Snapshot is not null, StartedAt, _lastRefreshAt, LastError);
 
+    private static IEnumerable<string> VolumeSignature(StorageSnapshot snapshot, string diskId) =>
+        snapshot.Volumes.Where(volume => volume.PhysicalDiskIds.Contains(diskId, StringComparer.Ordinal))
+            .OrderBy(volume => volume.Id, StringComparer.Ordinal)
+            .Select(volume => JsonSerializer.Serialize(volume, StorageContractJson.Options));
+
     private void PublishChanges(StorageSnapshot? previous, StorageSnapshot next)
     {
         var oldById = previous?.Disks.ToDictionary(static disk => disk.Id, StringComparer.Ordinal) ?? new Dictionary<string, StorageDisk>(StringComparer.Ordinal);
@@ -164,6 +169,9 @@ public sealed class StorageRuntimeState(StorageSnapshotStore store, StorageChang
                 changes.Publish(new StorageChange(StorageChangeKind.DeviceArrived, disk.Id, null, disk.Health, now));
             else if (old.Health != disk.Health)
                 changes.Publish(new StorageChange(StorageChangeKind.HealthChanged, disk.Id, old.Health, disk.Health, now));
+            else if (old.TemperatureC != disk.TemperatureC || old.LifeRemainingPercent != disk.LifeRemainingPercent ||
+                !VolumeSignature(previous!, disk.Id).SequenceEqual(VolumeSignature(next, disk.Id)))
+                changes.Publish(new StorageChange(StorageChangeKind.MetricsChanged, disk.Id, old.Health, disk.Health, now));
         }
         foreach (var old in oldById.Values)
             if (!newById.ContainsKey(old.Id)) changes.Publish(new StorageChange(StorageChangeKind.DeviceRemoved, old.Id, old.Health, null, now));

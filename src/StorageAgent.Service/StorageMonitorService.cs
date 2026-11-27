@@ -25,7 +25,7 @@ public sealed class StorageMonitorService(
         StartDeviceNotifications();
         await RefreshSafelyAsync(force: true, stoppingToken);
 
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
         var tick = timer.WaitForNextTickAsync(stoppingToken).AsTask();
         var change = _deviceChanges.Reader.ReadAsync(stoppingToken).AsTask();
         try
