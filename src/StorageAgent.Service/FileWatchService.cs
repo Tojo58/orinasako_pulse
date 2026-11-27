@@ -12,17 +12,30 @@ internal sealed class FileWatchService : BackgroundService
 {
     private sealed class Observation : IDisposable
     {
+        public readonly object Gate = new();
         public FileSystemWatcher? Watcher;
+        public CancellationTokenSource? Worker;
+        public int Reattach;
         public DateTimeOffset LastScan;
         public string? Usn;
         public DateTimeOffset LastUsnCheck;
         public int Scanning;
         public int Dirty = 1;
-        public void Dispose() => Watcher?.Dispose();
+        public void Dispose()
+        {
+            lock (Gate)
+            {
+                Worker?.Cancel();
+                Watcher?.Dispose();
+                Watcher = null;
+            }
+        }
     }
     private readonly FileWatchStore store;
     private readonly ILogger<FileWatchService> logger;
     private readonly ConcurrentDictionary<(string Consumer, string Root), Observation> observations = new();
+
+    private readonly ConcurrentDictionary<string, DateTimeOffset> pausedVolumes = new(StringComparer.OrdinalIgnoreCase);
 
     public FileWatchService(ILogger<FileWatchService> logger)
     {
@@ -54,6 +67,8 @@ internal sealed class FileWatchService : BackgroundService
         try { roots = request.Roots.Select(FileSystemInventory.Normalize).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); }
         catch (ArgumentException) { throw new InvalidDataException("Invalid filesystem root."); }
         store.Configure(consumer, roots);
+        foreach (var key in observations.Keys.Where(key => key.Consumer == consumer && !roots.Contains(key.Root, StringComparer.OrdinalIgnoreCase)))
+            if (observations.TryRemove(key, out var removed)) removed.Dispose();
         return true;
     }
     public IReadOnlyList<FileWatchStatus> Status(FileWatchRequest? request)
@@ -93,10 +108,44 @@ internal sealed class FileWatchService : BackgroundService
         return true;
     }
 
+    private bool Paused(string root)
+    {
+        var volume = Path.GetPathRoot(root);
+        return volume is not null && pausedVolumes.TryGetValue(volume, out var until) && until > DateTimeOffset.UtcNow;
+    }
+
+    public async Task<bool> PauseVolumeAsync(FileWatchRequest? request, CancellationToken token)
+    {
+        _ = Consumer(request);
+        var root = Root(request);
+        if (root.Length != 3 || !char.IsAsciiLetter(root[0]) || root[1] != ':' || root[2] != Path.DirectorySeparatorChar)
+            throw new InvalidDataException("A drive root is required for a removal pause.");
+        pausedVolumes[root] = DateTimeOffset.UtcNow.AddSeconds(60);
+        var affected = observations.Where(pair => string.Equals(Path.GetPathRoot(pair.Key.Root), root, StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.Value).ToArray();
+        foreach (var observation in affected)
+        {
+            lock (observation.Gate)
+            {
+                Interlocked.Exchange(ref observation.Dirty, 1);
+                observation.Worker?.Cancel();
+                observation.Watcher?.Dispose();
+                observation.Watcher = null;
+            }
+        }
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
+        budget.CancelAfter(TimeSpan.FromSeconds(12));
+        while (affected.Any(observation => { lock (observation.Gate) return observation.Worker is not null; }))
+            await Task.Delay(100, budget.Token);
+        return true;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
+            foreach (var pause in pausedVolumes.Where(pair => pair.Value <= DateTimeOffset.UtcNow).ToArray())
+                pausedVolumes.TryRemove(pause.Key, out _);
             var watches = store.All();
             var keys = watches.Select(w => (w.Consumer, w.Root)).ToHashSet();
             foreach (var key in observations.Keys)
@@ -105,8 +154,17 @@ internal sealed class FileWatchService : BackgroundService
             foreach (var watch in watches)
             {
                 var observation = observations.GetOrAdd((watch.Consumer, watch.Root), _ => new());
-                if (observation.Watcher is null && !FileSystemInventory.IsNetwork(watch.Root))
-                    Attach(watch.Root, observation);
+                if (Paused(watch.Root)) continue;
+                lock (observation.Gate)
+                {
+                    if (Interlocked.Exchange(ref observation.Reattach, 0) != 0)
+                    {
+                        observation.Watcher?.Dispose();
+                        observation.Watcher = null;
+                    }
+                    if (!Paused(watch.Root) && observation.Watcher is null && !FileSystemInventory.IsNetwork(watch.Root))
+                        Attach(watch.Root, observation);
+                }
                 // USN detects lost watcher notifications and journal replacement on NTFS.
                 // Non-NTFS/SMB and restart always use a bounded full reconciliation.
                 if (DateTimeOffset.UtcNow - observation.LastUsnCheck >= TimeSpan.FromSeconds(30))
@@ -127,15 +185,31 @@ internal sealed class FileWatchService : BackgroundService
             await Parallel.ForEachAsync(due, new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = token },
                 async (item, ct) =>
                 {
+                    using var worker = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    lock (item.Observation.Gate)
+                    {
+                        if (Paused(item.Watch.Root))
+                        {
+                            Interlocked.Exchange(ref item.Observation.Dirty, 1);
+                            Volatile.Write(ref item.Observation.Scanning, 0);
+                            return;
+                        }
+                        item.Observation.Worker = worker;
+                    }
+                    try
+                    {
                     var upper = UsnCheckpoint.Read(item.Watch.Root);
                     FileInventory inventory;
-                    try { inventory = await FileInventoryWorker.ScanAsync(item.Watch.Root, ct); }
+                    try { inventory = await FileInventoryWorker.ScanAsync(item.Watch.Root, worker.Token); }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                    catch (OperationCanceledException) when (worker.IsCancellationRequested)
+                    { Interlocked.Exchange(ref item.Observation.Dirty, 1); return; }
                     catch (Exception error)
                     {
                         logger.LogWarning("Filesystem inventory unavailable ({Type}).", error.GetType().Name);
                         inventory = new(item.Watch.Root, false, [], [item.Watch.Root]);
                     }
+                    if (worker.IsCancellationRequested) { Interlocked.Exchange(ref item.Observation.Dirty, 1); return; }
                     try
                     {
                         var recovery = inventory.Complete ? UsnCheckpoint.Recover(item.Watch.Root, item.Watch.UsnPosition, upper) : null;
@@ -148,7 +222,12 @@ internal sealed class FileWatchService : BackgroundService
                         catch (Exception) { Interlocked.Exchange(ref item.Observation.Dirty, 1); }
                     }
                     item.Observation.LastScan = DateTimeOffset.UtcNow;
-                    Volatile.Write(ref item.Observation.Scanning, 0);
+                    }
+                    finally
+                    {
+                        lock (item.Observation.Gate) item.Observation.Worker = null;
+                        Volatile.Write(ref item.Observation.Scanning, 0);
+                    }
                 });
             await Task.Delay(TimeSpan.FromSeconds(2), token);
         }
@@ -168,7 +247,7 @@ internal sealed class FileWatchService : BackgroundService
             void Dirty() => Interlocked.Exchange(ref observation.Dirty, 1);
             watcher.Created += (_, _) => Dirty(); watcher.Deleted += (_, _) => Dirty();
             watcher.Changed += (_, _) => Dirty(); watcher.Renamed += (_, _) => Dirty();
-            watcher.Error += (_, _) => Dirty();
+            watcher.Error += (_, _) => { Interlocked.Exchange(ref observation.Reattach, 1); Dirty(); };
             watcher.EnableRaisingEvents = true;
             observation.Watcher = watcher;
         }

@@ -149,6 +149,8 @@ internal sealed class NamedPipeServer(
                 StorageOperation.FileWatchStatus => StorageContractJson.Success(request.RequestId, files.Status(request.FileWatch)),
                 StorageOperation.FileInventoryPage => StorageContractJson.Success(request.RequestId, files.Page(request.FileWatch)),
                 StorageOperation.FileChanges => StorageContractJson.Success(request.RequestId, files.Changes(request.FileWatch)),
+                StorageOperation.FileWatchPauseVolume => StorageContractJson.Success(request.RequestId,
+                    await files.PauseVolumeAsync(request.FileWatch, token)),
                 StorageOperation.FileWatchRefresh => StorageContractJson.Success(request.RequestId, files.Refresh(request.FileWatch)),
                 StorageOperation.Status => StorageContractJson.Success(request.RequestId, state.Status(ServiceVersion)),
                 StorageOperation.Inventory => StorageContractJson.Success(request.RequestId, state.Snapshot),

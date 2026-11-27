@@ -15,7 +15,7 @@ public static class StorageProtocol
          StorageOperation.ResolvePath or StorageOperation.Subscribe);
 }
 
-public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport, FileWatchConfigure, FileWatchStatus, FileInventoryPage, FileChanges, FileWatchRefresh }
+public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport, FileWatchConfigure, FileWatchStatus, FileInventoryPage, FileChanges, FileWatchRefresh, FileWatchPauseVolume }
 public enum MetricStatus { Available, Unavailable, Unsupported, Error }
 public enum StorageHealth { Healthy, Degraded, Critical, Unavailable, Unknown }
 public enum StorageTechnology { Hdd, Ssd, Nvme, Scm, Unknown }

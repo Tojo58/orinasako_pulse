@@ -34,8 +34,16 @@ internal static class FileInventoryWorker
         {
             if (child is not null)
             {
-                try { if (!child.HasExited) child.Kill(entireProcessTree: true); }
-                catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+                try
+                {
+                    if (!child.HasExited)
+                    {
+                        child.Kill(entireProcessTree: true);
+                        using var termination = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        await child.WaitForExitAsync(termination.Token);
+                    }
+                }
+                catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or OperationCanceledException) { }
                 child.Dispose();
             }
             try { File.Delete(output); } catch (IOException) { }

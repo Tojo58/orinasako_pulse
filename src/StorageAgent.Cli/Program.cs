@@ -79,6 +79,17 @@ try
             if (status.LastError is not null) Console.WriteLine($"Last local collector error: {status.LastError}");
             break;
         }
+        case "watch" when args.Length == 3 && args[1] == "clear":
+            await client.ConfigureFileWatchesAsync(args[2], []);
+            Console.WriteLine("Filesystem subscriptions removed.");
+            break;
+        case "watch" when args.Length == 3 && args[1] == "list":
+            Console.WriteLine(JsonSerializer.Serialize(await client.GetFileWatchStatusAsync(args[2]), StorageContractJson.Options));
+            break;
+        case "watch" when args.Length >= 4 && args[1] == "configure":
+            await client.ConfigureFileWatchesAsync(args[2], args[3..]);
+            Console.WriteLine("Filesystem subscriptions configured.");
+            break;
         case "system" when args.Length == 1 || (args.Length == 2 && args[1] == "--json"):
             Console.WriteLine(JsonSerializer.Serialize(await client.GetSystemReportAsync(), StorageContractJson.Options));
             break;
@@ -134,5 +145,7 @@ static void PrintHelp()
     Console.WriteLine("  storageagent system --json                  Full local system report (administrator).");
     Console.WriteLine("  storageagent connect --server <url> --collectors cpu,memory,...   Opt into system telemetry for this server.");
     Console.WriteLine("  storageagent status                         Show service and connection status.");
+    Console.WriteLine("  storageagent watch configure <consumer> <root> [...]   Register local filesystem roots (administrator).");
+    Console.WriteLine("  storageagent watch list <consumer> / watch clear <consumer>   Inspect or remove subscriptions.");
     Console.WriteLine("  storageagent logs [count]                   Show recent local service logs.");
 }

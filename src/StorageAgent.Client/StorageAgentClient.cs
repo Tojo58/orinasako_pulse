@@ -88,6 +88,10 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
     public Task<bool> RefreshFileWatchAsync(string consumer, string root, CancellationToken token = default) =>
         SendAsync<bool>(StorageOperation.FileWatchRefresh, token: token, fileWatch: new(consumer, Root: root));
 
+    public Task<bool> PauseFileVolumeAsync(string consumer, string volumeRoot, CancellationToken token = default) =>
+        SendAsync<bool>(StorageOperation.FileWatchPauseVolume, timeout: TimeSpan.FromSeconds(20), token: token,
+            fileWatch: new(consumer, Root: volumeRoot));
+
     private async Task<T> SendAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
         string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null, FileWatchRequest? fileWatch = null)
