@@ -113,7 +113,7 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
         }
 
         var request = new StorageRequest(StorageProtocol.Major, StorageProtocol.Minor, Guid.NewGuid().ToString("N"),
-            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage);
+            operation, deviceId, path, force, waitSeconds, serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage, fileWatch);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(request, StorageContractJson.Options);
         if (bytes.Length > StorageProtocol.MaxFrameBytes) throw new InvalidDataException("Request exceeds the local IPC frame limit.");
         var prefix = new byte[4];
