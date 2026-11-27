@@ -17,7 +17,7 @@ internal sealed class FileWatchStore : IDisposable
 
     public FileWatchStore(string path)
     {
-        db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+        db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
         db.Open();
         using var command = db.CreateCommand();
         command.CommandText = """
