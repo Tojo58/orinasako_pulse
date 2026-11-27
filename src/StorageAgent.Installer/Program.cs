@@ -45,6 +45,7 @@ try
         if (installed is not null && installed >= minimum && ServiceInstaller.QueryStatus() != "not-installed")
         {
             ServiceInstaller.StartIfInstalled();
+            ServiceInstaller.WaitUntilRunning();
             Console.WriteLine($"Storage Health Agent {installed} is installed and available.");
             return 0;
         }
@@ -54,6 +55,7 @@ try
         if (payloadVersion < minimum || (installed is not null && payloadVersion < installed))
             throw new InvalidDataException("The bundled service does not meet the minimum version or would downgrade the installed service.");
         ServiceInstaller.InstallOrUpdate(payload);
+        ServiceInstaller.WaitUntilRunning();
         Console.WriteLine("Storage Health Agent was installed or updated.");
         return 0;
     }

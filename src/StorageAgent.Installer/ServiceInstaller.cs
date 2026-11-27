@@ -70,6 +70,20 @@ internal static class ServiceInstaller
         }
     }
 
+    public static void WaitUntilRunning()
+    {
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            var state = QueryStatus();
+            if (state == "running") return;
+            if (state is "stopped" or "not-installed")
+                throw new IOException("Storage Agent failed to start.");
+            Thread.Sleep(250);
+        }
+        throw new TimeoutException("Storage Agent did not reach the running state.");
+    }
+
     public static void InstallOrUpdate(string source)
     {
         var sourceDirectory = Path.GetFullPath(source);

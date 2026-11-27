@@ -36,13 +36,20 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
     public Task<StorageSnapshot> RefreshAsync(CancellationToken token = default) =>
         SendAsync<StorageSnapshot>(StorageOperation.Refresh, force: true, timeout: TimeSpan.FromSeconds(60), token: token);
 
+    /// <summary>Waits for one change, or returns null after a bounded interval.</summary>
+    public Task<StorageChange?> WaitForChangeAsync(int waitSeconds = 15, CancellationToken token = default)
+    {
+        var seconds = Math.Clamp(waitSeconds, 1, 60);
+        return SendNullableAsync<StorageChange>(StorageOperation.Subscribe,
+            waitSeconds: seconds, timeout: TimeSpan.FromSeconds(seconds + 5), token: token);
+    }
+
     public async IAsyncEnumerable<StorageChange> SubscribeAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var change = await SendNullableAsync<StorageChange>(StorageOperation.Subscribe,
-                waitSeconds: 30, timeout: TimeSpan.FromSeconds(35), token: cancellationToken);
+            var change = await WaitForChangeAsync(30, cancellationToken);
             if (change is not null) yield return change;
         }
     }
