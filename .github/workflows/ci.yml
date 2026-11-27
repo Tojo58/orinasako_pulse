@@ -47,6 +47,16 @@ jobs:
         run: |
           dotnet pack src/StorageAgent.Contracts/StorageAgent.Contracts.csproj --configuration Release --output artifacts/package/nuget
           dotnet pack src/StorageAgent.Client/StorageAgent.Client.csproj --configuration Release --output artifacts/package/nuget
+      - name: Build standalone setup
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          [xml]$props = Get-Content Directory.Build.props
+          $version = $props.Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag and project version differ." }
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          & $nsis "/DAPP_VERSION=$version" scripts/package.nsi
+          if ($LASTEXITCODE -ne 0) { throw "NSIS packaging failed." }
       - name: Prepare release bundle
         shell: pwsh
         run: |
@@ -67,4 +77,4 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip" --generate-notes
+        run: gh release create $env:GITHUB_REF_NAME "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip" "StorageAgent-Setup-$($env:GITHUB_REF_NAME.Substring(1))-win-x64.exe" --generate-notes
