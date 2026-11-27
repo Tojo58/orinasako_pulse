@@ -44,6 +44,7 @@ public static class FileSystemInventory
             if (!Directory.Exists(root)) return new(root, false, [], [root]);
         }
         catch (Exception error) when (AccessFailure(error)) { return new(root, false, [], [root]); }
+        var rootIdentity = OperatingSystem.IsWindows() && !IsNetwork(root) ? Identity(root) : default;
         pending.Push(root);
         while (pending.TryPop(out var directory))
         {
@@ -61,12 +62,11 @@ public static class FileSystemInventory
                         var attributes = File.GetAttributes(child);
                         if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                         var isDirectory = (attributes & FileAttributes.Directory) != 0;
-                        if (isDirectory && directory.Equals(root, StringComparison.OrdinalIgnoreCase) &&
-                            (Path.GetPathRoot(root) == root || Path.GetFileName(child) is "System Volume Information" or "$RECYCLE.BIN") &&
-                            SystemDirectories.Contains(Path.GetFileName(child))) continue;
+                        if (isDirectory && IsExcludedTopLevel(root, directory, Path.GetFileName(child))) continue;
                         var info = new FileInfo(child);
+                        var identity = OperatingSystem.IsWindows() && !IsNetwork(root) ? Identity(child) : default;
                         entries.Add(new(child, isDirectory, isDirectory ? 0 : info.Length,
-                            info.LastWriteTimeUtc, OperatingSystem.IsWindows() && !IsNetwork(root) ? Identity(child) : null));
+                            info.LastWriteTimeUtc, identity.Hash, identity.Reference));
                         if (isDirectory) pending.Push(child);
                     }
                     catch (Exception error) when (AccessFailure(error)) { inaccessible.Add(directory); }
@@ -74,8 +74,15 @@ public static class FileSystemInventory
             }
             catch (Exception error) when (AccessFailure(error)) { inaccessible.Add(directory); }
         }
-        return new(root, inaccessible.Count == 0, entries, inaccessible.Take(1024).ToArray());
+        return new(root, inaccessible.Count == 0, entries, inaccessible.Take(1024).ToArray(),
+            RootIdentity: rootIdentity.Hash, RootReference: rootIdentity.Reference);
     }
+
+    public static bool IsExcludedTopLevel(string root, string parent, string name) =>
+        parent.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+        (string.Equals(Path.GetPathRoot(root), root, StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase)) && SystemDirectories.Contains(name);
 
     public static IReadOnlyList<string> Directories(string root)
     {
@@ -96,12 +103,13 @@ public static class FileSystemInventory
         error is IOException or UnauthorizedAccessException or SecurityException;
 
     // An identity is only a best-effort rename correlation, never an authorization token.
-    private static string? Identity(string path)
+    private static (string? Hash, string? Reference) Identity(string path)
     {
         using var handle = CreateFile(path, 0, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
-        if (handle.IsInvalid || !GetFileInformationByHandle(handle, out var info)) return null;
+        if (handle.IsInvalid || !GetFileInformationByHandle(handle, out var info)) return default;
         var input = $"{info.VolumeSerialNumber:X8}:{info.FileIndexHigh:X8}:{info.FileIndexLow:X8}:{info.CreationHigh:X8}:{info.CreationLow:X8}";
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
+        return (Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))),
+            UsnJournalReplay.Reference(((ulong)info.FileIndexHigh << 32) | info.FileIndexLow));
     }
 
     [StructLayout(LayoutKind.Sequential)]
