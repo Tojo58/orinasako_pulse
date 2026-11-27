@@ -99,6 +99,18 @@ public sealed class ContractAndPrivacyTests
         Assert.True(roundTrip.Force);
     }
 
+    [Fact]
+    public void NonAdministrativeClientsAreRestrictedToLocalReadOperations()
+    {
+        foreach (var operation in Enum.GetValues<StorageOperation>())
+        {
+            var readOnly = operation is StorageOperation.Status or StorageOperation.Inventory or
+                StorageOperation.Diagnostics or StorageOperation.ResolvePath or StorageOperation.Subscribe;
+            Assert.Equal(!readOnly, StorageProtocol.RequiresAdministrator(operation));
+        }
+        Assert.True(StorageProtocol.RequiresAdministrator((StorageOperation)999));
+    }
+
     private sealed class TestIdentityProtector : IMachineKeyProtector
     {
         public byte[] Protect(ReadOnlySpan<byte> plaintext) => plaintext.ToArray().Select(static value => (byte)(value ^ 0x27)).ToArray();

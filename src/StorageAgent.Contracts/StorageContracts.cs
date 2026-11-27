@@ -9,6 +9,10 @@ public static class StorageProtocol
     public const int Minor = 0;
     public const string PipeName = "storage-health-agent.v1";
     public const int MaxFrameBytes = 1_048_576;
+
+    public static bool RequiresAdministrator(StorageOperation operation) => operation is not
+        (StorageOperation.Status or StorageOperation.Inventory or StorageOperation.Diagnostics or
+         StorageOperation.ResolvePath or StorageOperation.Subscribe);
 }
 
 public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport }

@@ -42,14 +42,18 @@ try
     {
         var minimum = Version.Parse(Option(arguments, "--minimum-version") ?? throw new ArgumentException("--minimum-version is required."));
         var installed = ServiceInstaller.InstalledVersion();
-        if (installed is not null && installed >= minimum)
+        if (installed is not null && installed >= minimum && ServiceInstaller.QueryStatus() != "not-installed")
         {
             ServiceInstaller.StartIfInstalled();
             Console.WriteLine($"Storage Health Agent {installed} is installed and available.");
             return 0;
         }
         RequireAdministrator();
-        ServiceInstaller.InstallOrUpdate(source ?? throw new ArgumentException("--source is required to install or update."));
+        var payload = source ?? throw new ArgumentException("--source is required to install or update.");
+        var payloadVersion = Version.Parse(FileVersionInfo.GetVersionInfo(Path.Combine(payload, "StorageAgent.Service.exe")).FileVersion ?? "0.0.0");
+        if (payloadVersion < minimum || (installed is not null && payloadVersion < installed))
+            throw new InvalidDataException("The bundled service does not meet the minimum version or would downgrade the installed service.");
+        ServiceInstaller.InstallOrUpdate(payload);
         Console.WriteLine("Storage Health Agent was installed or updated.");
         return 0;
     }

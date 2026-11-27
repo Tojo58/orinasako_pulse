@@ -41,3 +41,7 @@ Use the HTTP status for transport semantics and a stable JSON `code` for machine
 - Keep database transactions and tenant/resource boundaries server-owned. Do not treat a machine identifier as a user identity.
 
 See the OpenAPI spec and `examples/server-dotnet/README.md` for an example receiver.
+
+## Local consumer permissions
+
+Authenticated local users may read status, the cached inventory and diagnostics, resolve paths and subscribe to device changes without elevation. Fresh hardware collection, system reports, remote connection administration, remote synchronization and service logs require an elevated administrator. Local volume labels and mount paths are not sent to remote servers.

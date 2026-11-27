@@ -126,7 +126,7 @@ internal sealed class NamedPipeServer(
             return;
         }
 
-        if ((request.Operation is StorageOperation.Connect or StorageOperation.Disconnect or StorageOperation.SystemReport) && !IsAdministrator(pipe))
+        if (StorageProtocol.RequiresAdministrator(request.Operation) && !IsAdministrator(pipe))
         {
             await WriteFrameAsync(pipe, StorageContractJson.Failure(request.RequestId, "access.administrator_required",
                 "Run this Storage Agent command from an elevated Administrator session."), token);
