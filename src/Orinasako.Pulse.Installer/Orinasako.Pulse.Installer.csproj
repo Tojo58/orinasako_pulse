@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Orinasako.Pulse.Installer</AssemblyName>
+    <PackageId>Orinasako.Pulse.Installer</PackageId>
+    <Description>Install, update, and uninstall the Orinasako Pulse Windows service.</Description>
+  </PropertyGroup>
+</Project>

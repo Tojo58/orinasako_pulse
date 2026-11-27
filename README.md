@@ -1,23 +1,23 @@
-# Storage Agent
+# Orinasako Pulse
 
-Storage Agent is an MIT-licensed, standalone Windows service for read-only system monitoring, hardware inventory and native storage health diagnostics. It collects what the Windows storage stack and the hardware driver expose, keeps an encrypted local snapshot, and can optionally send it to one or more compatible servers.
+Orinasako Pulse is an MIT-licensed, standalone Windows service for read-only system monitoring, hardware inventory and native storage health diagnostics. It collects what the Windows storage stack and the hardware driver expose, keeps an encrypted local snapshot, and can optionally send it to one or more compatible servers.
 
 The agent works without an Internet connection or remote account. Remote connections are initiated by the service over HTTPS; Windows does not need an inbound firewall rule or listening TCP port. The service never runs a shell command or PowerShell for disk diagnostics.
 
 ## System monitoring
 
-The existing service now includes independent Windows system collectors in addition to native SMART. Run `storageagent system --json` from an elevated terminal to obtain the storage inventory and system telemetry in one JSON response. A remote server receives only storage by default; to opt into additional categories during pairing, use `storageagent connect --server https://inventory.example/api/storage-agent/v1 --collectors cpu,memory,gpu`. To include storage as well, specify `--collectors storage,cpu,memory,gpu`. The backend must support the optional versioned `system` envelope property in OpenAPI before opting in. Existing connections remain storage-only; disconnect and re-enroll to change permissions. See [system monitoring](docs/system-monitoring.md).
+The existing service now includes independent Windows system collectors in addition to native SMART. Run `pulse system --json` from an elevated terminal to obtain the storage inventory and system telemetry in one JSON response. A remote server receives only storage by default; to opt into additional categories during pairing, use `pulse connect --server https://inventory.example/api/storage-agent/v1 --collectors cpu,memory,gpu`. To include storage as well, specify `--collectors storage,cpu,memory,gpu`. The backend must support the optional versioned `system` envelope property in OpenAPI before opting in. Existing connections remain storage-only; disconnect and re-enroll to change permissions. See [system monitoring](docs/system-monitoring.md).
 
 ## Components
 
-- `StorageAgent.Service`: Windows service; collector scheduling, runtime state, named-pipe server and remote synchronization orchestration.
-- `StorageAgent.Collectors`: independent CPU, memory, GPU, motherboard, network, power, thermal, OS, processes, peripherals and security collectors.
-- `StorageAgent.Transport`: outbound HTTPS protocol, per-destination privacy filtering and DPAPI-protected queue.
-- `StorageAgent.Client`: .NET SDK for local named-pipe consumers.
-- `storageagent`: CLI for pairing, status, synchronization, logs and disconnection.
-- `StorageAgent.Installer`: install, update and uninstall operations for administrators.
-- `StorageAgent.Contracts`: versioned local IPC and remote protocol DTOs.
-- `StorageAgent.Core`: native Windows storage collection and protocol parsers.
+- `Orinasako.Pulse.Service`: Windows service; collector scheduling, runtime state, named-pipe server and remote synchronization orchestration.
+- `Orinasako.Pulse.Collectors`: independent CPU, memory, GPU, motherboard, network, power, thermal, OS, processes, peripherals and security collectors.
+- `Orinasako.Pulse.Transport`: outbound HTTPS protocol, per-destination privacy filtering and DPAPI-protected queue.
+- `Orinasako.Pulse.Client`: .NET SDK for local named-pipe consumers.
+- `pulse`: CLI for pairing, status, synchronization, logs and disconnection.
+- `Orinasako.Pulse.Installer`: install, update and uninstall operations for administrators.
+- `Orinasako.Pulse.Contracts`: versioned local IPC and remote protocol DTOs.
+- `Orinasako.Pulse.Core`: native Windows storage collection and protocol parsers.
 
 No project requires a business application. The service uses the Windows Storage APIs and read-only ATA/NVMe/SCSI pass-through where the active driver and controller permit it. USB bridges, RAID controllers, virtual disks and vendor drivers can hide or translate SMART data; such metrics are reported unavailable instead of guessed.
 
@@ -26,24 +26,24 @@ No project requires a business application. The service uses the Windows Storage
 Requires the .NET SDK selected by `global.json`.
 
 ```sh
-dotnet restore StorageAgent.slnx
-dotnet build StorageAgent.slnx --no-restore
-dotnet test StorageAgent.slnx --no-build
+dotnet restore Orinasako.Pulse.slnx
+dotnet build Orinasako.Pulse.slnx --no-restore
+dotnet test Orinasako.Pulse.slnx --no-build
 ```
 
 These commands compile on Linux for static review and parser tests. The Windows service, DPAPI, named pipes, Service Control Manager installation, physical SMART collection and hardware compatibility must be validated on Windows. A passing cross-platform build does not claim hardware support.
 
 ## Install and use
 
-Run the packaged installer as an elevated Windows administrator. Installation creates `StorageAgent` as an automatic Windows service and protects its ProgramData with ACLs for SYSTEM and Administrators. Uninstall preserves the encrypted connection vault and identity data unless `--remove-data` is explicitly specified.
+Run the packaged installer as an elevated Windows administrator. Installation creates `OrinasakoPulse` as an automatic Windows service and protects its ProgramData with ACLs for SYSTEM and Administrators. Uninstall preserves the encrypted connection vault and identity data unless `--remove-data` is explicitly specified.
 
 ```text
-storageagent status
-storageagent connect --server https://inventory.example/api/storage-agent/v1
-storageagent connections list
-storageagent sync
-storageagent logs 100
-storageagent disconnect <connection-id>
+pulse status
+pulse connect --server https://inventory.example/api/storage-agent/v1
+pulse connections list
+pulse sync
+pulse logs 100
+pulse disconnect <connection-id>
 ```
 
 `connect` asks for the temporary one-time code without echoing it or placing it in shell history/arguments. An administrator must approve connection changes. The agent stores per-server access/refresh credentials and pending deliveries with machine-scoped Windows DPAPI. Tokens are never included in the CLI output or logs.

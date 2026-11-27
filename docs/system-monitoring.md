@@ -1,7 +1,7 @@
 # Modular Windows system monitoring
 
 The existing storage collector, Windows service identity, IPC pipe and HTTPS
-storage protocol are preserved. StorageAgent.Collectors adds independently
+storage protocol are preserved. Orinasako.Pulse.Collectors adds independently
 scheduled, independently defined, allowlisted WMI probes for CPU, memory, GPU, motherboard/BIOS,
 network, power, thermal, operating system, processes/services, peripherals and
 security. Storage uses its native SMART collector and existing snapshot cache.
@@ -9,8 +9,8 @@ Each section and probe has its own observation time, probe status and per-field 
 Unavailable values are JSON null, not zero. The schema is versioned separately
 from the stable storage contract.
 
-Run `storageagent system --json` as an administrator. Applications can call
-`StorageAgentClient.GetSystemReportAsync` through the same administrator-gated
+Run `pulse system --json` as an administrator. Applications can call
+`OrinasakoPulseClient.GetSystemReportAsync` through the same administrator-gated
 pipe. Configure intervals using .NET configuration, e.g.
 `Monitoring__Intervals__Cpu=10` in the service environment, and restart the service.
 Disable a category using e.g. `Monitoring__Enabled__Gpu=false`. Intervals are bounded to 5–86400 seconds; a blocked WMI provider cannot spawn
@@ -18,7 +18,7 @@ another instance of its own worker. The storage schedule is unchanged.
 
 ## Remote delivery
 
-Pair using `storageagent connect --server https://inventory.example/api/storage-agent/v1 --collectors cpu,memory`.
+Pair using `pulse connect --server https://inventory.example/api/storage-agent/v1 --collectors cpu,memory`.
 The administrator enters the one-use code securely. Categories are stored in
 the existing encrypted connection vault. Existing connections and ordinary
 pairing remain storage-only. Explicit `--collectors` replaces the default scope: add `storage` to include disk diagnostics. Without it, no physical disk or volume data, storage events or remote storage commands are allowed. The snapshot envelope contains empty storage arrays and `storageIncluded:false`. To change scope, disconnect/re-enroll.

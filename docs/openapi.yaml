@@ -1,6 +1,6 @@
 openapi: 3.1.2
 info:
-  title: Storage Agent Remote Protocol
+  title: Orinasako Pulse Remote Protocol
   version: 1.0.0
   description: >-
     Application-neutral HTTPS protocol for pairing Windows storage agents,

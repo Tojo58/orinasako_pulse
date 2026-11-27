@@ -2,7 +2,7 @@
 
 ## Local operation
 
-The Windows service collects a bounded storage snapshot at startup, on device changes and periodically. Hardware requests use read-only Windows storage IOCTLs. The local snapshot and logs live under `%ProgramData%\StorageAgent`; the installer restricts the data directory to SYSTEM and Administrators. Collection remains available when all remote servers are offline.
+The Windows service collects a bounded storage snapshot at startup, on device changes and periodically. Hardware requests use read-only Windows storage IOCTLs. The local snapshot and logs live under `%ProgramData%\OrinasakoPulse`; the installer restricts the data directory to SYSTEM and Administrators. Collection remains available when all remote servers are offline.
 
 Local consumers use the versioned named pipe and .NET client. The administrative CLI talks to the same service; connection changes require an elevated administrator token. The pipe rejects remote clients. The service does not open an inbound TCP port.
 

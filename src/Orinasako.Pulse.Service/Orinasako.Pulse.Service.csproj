@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Orinasako.Pulse.Service</AssemblyName>
+    <PackageId>Orinasako.Pulse.Service</PackageId>
+    <Description>Windows background service for Orinasako Pulse.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orinasako.Pulse.Tests" />
+    <ProjectReference Include="../Orinasako.Pulse.Contracts/Orinasako.Pulse.Contracts.csproj" />
+    <ProjectReference Include="../Orinasako.Pulse.Core/Orinasako.Pulse.Core.csproj" />
+    <ProjectReference Include="../Orinasako.Pulse.Collectors/Orinasako.Pulse.Collectors.csproj" />
+    <ProjectReference Include="../Orinasako.Pulse.Transport/Orinasako.Pulse.Transport.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+</Project>

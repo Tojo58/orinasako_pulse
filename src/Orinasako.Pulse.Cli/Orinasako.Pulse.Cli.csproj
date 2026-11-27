@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>pulse</AssemblyName>
+    <PackageId>Orinasako.Pulse.Cli</PackageId>
+    <Description>Command-line administration for the Windows Orinasako Pulse.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Orinasako.Pulse.Client/Orinasako.Pulse.Client.csproj" />
+  </ItemGroup>
+</Project>

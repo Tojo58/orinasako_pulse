@@ -19,6 +19,6 @@ The current Linux/WSL build cannot validate physical Windows IOCTLs, DPAPI, serv
 ## API references
 
 - Microsoft documents [`IOCTL_STORAGE_QUERY_PROPERTY`](https://learn.microsoft.com/windows-hardware/drivers/ddi/ntddstor/ni-ntddstor-ioctl_storage_query_property) and [`STORAGE_PROTOCOL_DATA_DESCRIPTOR`](https://learn.microsoft.com/windows/win32/api/winioctl/ns-winioctl-storage_protocol_data_descriptor) for device/adapter and ATA/NVMe protocol-specific queries.
-- Microsoft documents [`IOCTL_ATA_PASS_THROUGH`](https://learn.microsoft.com/windows-hardware/drivers/ddi/ntddscsi/ni-ntddscsi-ioctl_ata_pass_through) as requiring a handle with read/write access. Storage Agent uses that access only for enumerated IDENTIFY and SMART read commands; it has no code path for ATA write, firmware, sanitize or format commands.
+- Microsoft documents [`IOCTL_ATA_PASS_THROUGH`](https://learn.microsoft.com/windows-hardware/drivers/ddi/ntddscsi/ni-ntddscsi-ioctl_ata_pass_through) as requiring a handle with read/write access. Orinasako Pulse uses that access only for enumerated IDENTIFY and SMART read commands; it has no code path for ATA write, firmware, sanitize or format commands.
 - Windows exposes supplemental counters through [`MSFT_StorageReliabilityCounter`](https://learn.microsoft.com/windows-hardware/drivers/storage/msft-storagereliabilitycounter).
-- [CrystalDiskInfo](https://crystalmark.info/en/software/CrystalDiskInfo/) is a capability/UX reference for storage-health monitoring. Storage Agent does not copy its implementation or source code.
+- [CrystalDiskInfo](https://crystalmark.info/en/software/CrystalDiskInfo/) is a capability/UX reference for storage-health monitoring. Orinasako Pulse does not copy its implementation or source code.

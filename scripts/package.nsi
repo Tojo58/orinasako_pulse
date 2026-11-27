@@ -9,21 +9,21 @@ Unicode true
 !ifndef APP_VERSION
   !error "Pass -DAPP_VERSION from Directory.Build.props"
 !endif
-Name "Storage Agent"
-OutFile "StorageAgent-Setup-${APP_VERSION}-win-x64.exe"
+Name "Orinasako Pulse"
+OutFile "OrinasakoPulse-Setup-${APP_VERSION}-win-x64.exe"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 Page instfiles
-Section "Install or update Storage Agent"
+Section "Install or update Orinasako Pulse"
   InitPluginsDir
   SetOutPath "$PLUGINSDIR\payload"
   File /r /x "*.pdb" "artifacts${BUILDSEP}package${BUILDSEP}payload${BUILDSEP}*.*"
   SetOutPath "$PLUGINSDIR\installer"
   File /r /x "*.pdb" "artifacts${BUILDSEP}package${BUILDSEP}installer${BUILDSEP}*.*"
-  ExecWait '"$PLUGINSDIR\installer\StorageAgent.Installer.exe" ensure --source "$PLUGINSDIR\payload" --minimum-version ${APP_VERSION}' $0
+  ExecWait '"$PLUGINSDIR\installer\Orinasako.Pulse.Installer.exe" ensure --source "$PLUGINSDIR\payload" --minimum-version ${APP_VERSION}' $0
   ${If} $0 != 0
     SetErrorLevel 1
-    Abort "Storage Agent could not be installed or started."
+    Abort "Orinasako Pulse could not be installed or started."
   ${EndIf}
   SetErrorLevel 0
 SectionEnd

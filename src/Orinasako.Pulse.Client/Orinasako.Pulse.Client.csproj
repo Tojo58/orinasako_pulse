@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Orinasako.Pulse.Client</PackageId>
+    <Description>Named-pipe client for Orinasako Pulse.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Orinasako.Pulse.Contracts/Orinasako.Pulse.Contracts.csproj" />
+  </ItemGroup>
+</Project>

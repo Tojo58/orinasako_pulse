@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Independent read-only Windows system collectors.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orinasako.Pulse.Tests" />
+    <ProjectReference Include="../Orinasako.Pulse.Contracts/Orinasako.Pulse.Contracts.csproj" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+</Project>

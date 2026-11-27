@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <PackageId>StorageAgent.Contracts</PackageId>
-    <Description>Versioned local protocol contracts for Storage Agent.</Description>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-  </PropertyGroup>
-</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Outbound HTTPS protocol, remote privacy filtering and encrypted connection storage.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orinasako.Pulse.Service" />
+    <InternalsVisibleTo Include="Orinasako.Pulse.Tests" />
+    <ProjectReference Include="../Orinasako.Pulse.Contracts/Orinasako.Pulse.Contracts.csproj" />
+    <ProjectReference Include="../Orinasako.Pulse.Core/Orinasako.Pulse.Core.csproj" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+  </ItemGroup>
+</Project>

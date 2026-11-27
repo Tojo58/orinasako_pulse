@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="src/Orinasako.Pulse.Contracts/Orinasako.Pulse.Contracts.csproj" />
+  <Project Path="src/Orinasako.Pulse.Core/Orinasako.Pulse.Core.csproj" />
+  <Project Path="src/Orinasako.Pulse.Collectors/Orinasako.Pulse.Collectors.csproj" />
+  <Project Path="src/Orinasako.Pulse.Transport/Orinasako.Pulse.Transport.csproj" />
+  <Project Path="src/Orinasako.Pulse.Client/Orinasako.Pulse.Client.csproj" />
+  <Project Path="src/Orinasako.Pulse.Cli/Orinasako.Pulse.Cli.csproj" />
+  <Project Path="src/Orinasako.Pulse.Service/Orinasako.Pulse.Service.csproj" />
+  <Project Path="src/Orinasako.Pulse.Installer/Orinasako.Pulse.Installer.csproj" />
+  <Project Path="tests/Orinasako.Pulse.Tests/Orinasako.Pulse.Tests.csproj" />
+</Solution>

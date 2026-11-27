@@ -1,11 +1,11 @@
-# Storage Agent Remote Protocol v1
+# Orinasako Pulse Remote Protocol v1
 
 The normative HTTP contract is `openapi.yaml` (OpenAPI 3.1.2). Its server URL is the protocol root, conventionally `https://host/api/storage-agent/v1/`; endpoint paths below are relative to that root. A compatible backend may mount the root at any HTTPS path and implement the protocol without importing agent code or knowing about a particular business application. The service is optional; local collection and named-pipe clients work with no configured server.
 
 ## Pairing and authorization
 
 1. An authenticated server operator creates an enrollment from the server's own UI by calling `POST {protocolRoot}/enrollments` with an opaque server-owned `resourceRef`. The code is random, single-use, short-lived (recommended 5 minutes), stored server-side as a hash, bound to the operator's server-side authorization/scope, and rate-limited. The UI displays the code once and identifies the resource being authorized.
-2. On the Windows machine, an administrator runs `storageagent connect --server https://host/api/storage-agent/v1`. The URL is the exact protocol root; it must be HTTPS and contain no credentials, query, or fragment. The CLI reads the code without echo; the code is sent only to the service over its ACL-protected local named pipe, then over HTTPS.
+2. On the Windows machine, an administrator runs `pulse connect --server https://host/api/storage-agent/v1`. The URL is the exact protocol root; it must be HTTPS and contain no credentials, query, or fragment. The CLI reads the code without echo; the code is sent only to the service over its ACL-protected local named pipe, then over HTTPS.
 3. The service posts the code, its stable pseudonymous agent ID and protocol version to `POST {protocolRoot}/agents/enroll`. The server consumes the code once and returns a connection ID plus short-lived access and rotating refresh credentials. The request carries a recovery `requestId`; a retry with the same code, agent ID and request ID during the bounded recovery window returns credentials for the same connection and invalidates any earlier response that may have been lost. This lets the agent persist only the response it actually received without storing plaintext token responses on the server. Never allow code lookup or redemption to reveal whether another code exists.
 4. The service stores credentials and that server's pending queue in a DPAPI-protected local vault. Every server receives a different token pair; one server cannot see another server's connection, queue or status.
 
