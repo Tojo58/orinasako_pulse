@@ -14,15 +14,9 @@ internal static class FileInventoryWorker
         Process? child = null;
         try
         {
-            if (FileSystemInventory.IsNetwork(root))
-                child = InteractiveUserProcess.TryStart(executable, ["--filesystem-inventory", root, output], output)
-                    ?? throw new IOException("No active Windows session for SMB.");
-            else
-            {
-                var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
-                foreach (var argument in new[] { "--filesystem-inventory", root, output }) start.ArgumentList.Add(argument);
-                child = Process.Start(start) ?? throw new IOException("Inventory worker could not start.");
-            }
+            // Use the active user's permissions even for local paths. Never fall back to SYSTEM.
+            child = InteractiveUserProcess.TryStart(executable, ["--filesystem-inventory", root, output], output)
+                ?? throw new IOException("No active Windows session for filesystem inventory.");
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
             budget.CancelAfter(TimeSpan.FromMinutes(3));
             await child.WaitForExitAsync(budget.Token);
