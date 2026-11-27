@@ -59,8 +59,9 @@ jobs:
           $tag = "v$version"
           if ($env:GITHUB_REF -like 'refs/tags/*' -and $env:GITHUB_REF_NAME -ne $tag) { throw "Tag and project version differ." }
           if ($env:GITHUB_REF -like 'refs/heads/release/*' -and $env:GITHUB_REF_NAME -ne "release/$tag") { throw "Release branch and project version differ." }
-          gh release view $tag 2>$null
-          if ($LASTEXITCODE -eq 0) { throw "Release already exists. Do not overwrite a published version." }
+          $published = @(gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases" --jq '.[].tag_name')
+          if ($LASTEXITCODE -ne 0) { throw "Cannot determine existing releases." }
+          if ($published -contains $tag) { throw "Release already exists. Do not overwrite a published version." }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
           "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
       - name: Publish Windows service payload
@@ -163,8 +164,13 @@ jobs:
               if ($process.ExitCode -ne 0) { throw "Setup failed ($($process.ExitCode))." }
               if ((Get-Service StorageAgent).Status -ne 'Running') { throw "Storage Agent service is not running." }
               $cli = Join-Path $env:ProgramFiles 'Storage Health Agent/storageagent.exe'
-              & $cli status
-              if ($LASTEXITCODE -ne 0) { throw "Local IPC is not ready." }
+              $ready = $false
+              for ($retry = 0; $retry -lt 30; $retry++) {
+                & $cli status
+                if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+                Start-Sleep -Seconds 1
+              }
+              if (-not $ready) { throw "Local IPC is not ready." }
             }
           } finally {
             & artifacts/package/installer/StorageAgent.Installer.exe uninstall --remove-data
