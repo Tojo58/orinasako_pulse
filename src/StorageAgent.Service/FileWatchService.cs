@@ -32,9 +32,9 @@ internal sealed class FileWatchService : BackgroundService
 
     private static string Consumer(FileWatchRequest? request)
     {
-        if (request is null || !Regex.IsMatch(request.Consumer ?? "", "^[a-zA-Z0-9_.-]{1,64}$"))
+        if (request?.Consumer is not { } consumer || !Regex.IsMatch(consumer, "^[a-zA-Z0-9_.-]{1,64}$"))
             throw new InvalidDataException("Invalid filesystem consumer.");
-        return request.Consumer;
+        return consumer;
     }
 
     private static string Root(FileWatchRequest? request)
