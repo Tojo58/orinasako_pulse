@@ -12,13 +12,15 @@ internal static class RemoteTelemetrySanitizer
         var disks = snapshot.Disks.Select(disk => disk with
         {
             Id = diskIds[disk.Id],
-            DeviceNumber = null
+            DeviceNumber = null,
+            Transport = RemoteTransport(disk.Transport)
         }).ToArray();
         var volumes = snapshot.Volumes.Select(volume => volume with
         {
             Id = identity.CreateRemoteDeviceId(serverUrl, "volume", volume.Id),
             Label = null,
             MountPoints = [],
+            LocalMountFingerprint = null,
             PhysicalDiskIds = volume.PhysicalDiskIds
                 .Where(diskIds.ContainsKey)
                 .Select(diskId => diskIds[diskId])
@@ -28,9 +30,14 @@ internal static class RemoteTelemetrySanitizer
         return snapshot with { Disks = disks, Volumes = volumes };
     }
 
+    // Extra local bus distinctions are not part of the existing remote v1 schema.
+    private static StorageTransport RemoteTransport(StorageTransport transport) =>
+        transport is StorageTransport.FireWire or StorageTransport.Sd or StorageTransport.Mmc
+            ? StorageTransport.Other : transport;
+
     public static StorageChange Change(StorageChange change, string serverUrl, MachineIdentityStore identity) =>
         change with { DeviceId = identity.CreateRemoteDeviceId(serverUrl, "disk", change.DeviceId) };
 
     public static StorageDisk Disk(StorageDisk disk, string serverUrl, MachineIdentityStore identity) =>
-        disk with { Id = identity.CreateRemoteDeviceId(serverUrl, "disk", disk.Id), DeviceNumber = null };
+        disk with { Id = identity.CreateRemoteDeviceId(serverUrl, "disk", disk.Id), DeviceNumber = null, Transport = RemoteTransport(disk.Transport) };
 }

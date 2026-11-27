@@ -45,3 +45,5 @@ See the OpenAPI spec and `examples/server-dotnet/README.md` for an example recei
 ## Local consumer permissions
 
 Authenticated local users may read status, the cached inventory and diagnostics, resolve paths and subscribe to device changes without elevation. Fresh hardware collection, system reports, remote connection administration, remote synchronization and service logs require an elevated administrator. Local volume labels and mount paths are not sent to remote servers.
+
+The local volume contract may expose a `localMountFingerprint` (SHA-256 of a normalized Windows volume GUID path, domain-separated by `volume:`) for consumers to verify a mount immediately before a filesystem operation. It is never included in remote telemetry. Local FireWire, SD and MMC bus distinctions map to `other` for the existing remote v1 wire schema.

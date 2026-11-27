@@ -56,7 +56,7 @@ See [protocol and server integration](docs/protocol.md), [architecture](docs/arc
 
 ## Privacy
 
-Raw disk serials and Windows paths are used only during local mapping. They are not included in shared protocol contracts. The remote identity is a machine-local HMAC pseudonym and each server receives its own connection ID and authorization. An administrator can inspect the public contract before pairing and can revoke a server connection from the local CLI.
+Raw disk serials and Windows paths are used only during local mapping. The local volume fingerprint is omitted entirely from remote telemetry. They are not included in shared protocol contracts. The remote identity is a machine-local HMAC pseudonym and each server receives its own connection ID and authorization. An administrator can inspect the public contract before pairing and can revoke a server connection from the local CLI.
 
 ## Standalone Windows setup
 

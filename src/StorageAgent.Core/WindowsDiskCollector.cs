@@ -324,7 +324,9 @@ public sealed class WindowsDiskCollector(MachineIdentityStore identities) : ISto
         catch (UnauthorizedAccessException) { }
         return new VolumeRead(identities.CreateVolumeId(volumeName), label.ToString(), fileSystem.ToString(), kind, mounts,
             capacityAvailable ? total : null, diskNumbers,
-            new VolumeStorageValue(capacityAvailable ? total : null, capacityAvailable ? freeToCaller : null));
+            new VolumeStorageValue(capacityAvailable ? total : null, capacityAvailable ? freeToCaller : null),
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes("volume:" + volumeName.ToUpperInvariant()))).ToLowerInvariant());
     }
 
     private static Descriptor ParseDescriptor(byte[] bytes)
@@ -368,9 +370,9 @@ public sealed class WindowsDiskCollector(MachineIdentityStore identities) : ISto
 
     private static StorageTransport ToTransport(uint bus) => bus switch
     {
-        1 => StorageTransport.Scsi, 3 => StorageTransport.Ata, 7 => StorageTransport.Usb,
+        1 => StorageTransport.Scsi, 3 => StorageTransport.Ata, 4 => StorageTransport.FireWire, 7 => StorageTransport.Usb,
         8 => StorageTransport.Raid, 10 => StorageTransport.Sas, 11 => StorageTransport.Sata,
-        14 or 15 or 16 => StorageTransport.Virtual, 17 => StorageTransport.Nvme, _ => StorageTransport.Unknown
+        12 => StorageTransport.Sd, 13 => StorageTransport.Mmc, 14 or 15 or 16 => StorageTransport.Virtual, 17 => StorageTransport.Nvme, _ => StorageTransport.Unknown
     };
 
     private static ScsiSample ReadScsiLogs(SafeFileHandle handle)
@@ -473,13 +475,14 @@ public sealed class WindowsDiskCollector(MachineIdentityStore identities) : ISto
 
     private sealed record Descriptor(string? Vendor, string? Model, string? Firmware, string? Serial, uint BusType);
     private sealed record VolumeRead(string Id, string? Label, string? FileSystem, StorageVolumeKind Kind,
-        IReadOnlyList<string> Mounts, long? Capacity, IReadOnlyList<int> DeviceNumbers, VolumeStorageValue? Storage)
+        IReadOnlyList<string> Mounts, long? Capacity, IReadOnlyList<int> DeviceNumbers, VolumeStorageValue? Storage,
+        string? LocalMountFingerprint = null)
     {
         public StorageVolume Contract => new(Id, Label, FileSystem, Kind, Mounts,
             MetricValue(Capacity, "Windows volume inventory"),
             MetricValue(Storage?.FreeBytes, "GetDiskFreeSpaceEx"),
             MetricValue(Storage is { CapacityBytes: { } total, FreeBytes: { } free } ? Math.Max(0, total - free) : null, "GetDiskFreeSpaceEx"),
-            [], Storage is null ? "Volume capacity is unavailable." : null);
+            [], Storage is null ? "Volume capacity is unavailable." : null, LocalMountFingerprint);
     }
     private sealed record VolumeStorageValue(long? CapacityBytes, long? FreeBytes);
     private sealed record ScsiSample(StorageHealth Health, string? HealthBasis, int? TemperatureC,

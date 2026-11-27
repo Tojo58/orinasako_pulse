@@ -61,17 +61,20 @@ public sealed class ContractAndPrivacyTests
     {
         var keyPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "identity.key");
         var identity = new MachineIdentityStore(keyPath, new TestIdentityProtector());
-        var disk = TestDisk("local-disk-id");
+        var disk = TestDisk("local-disk-id") with { Transport = StorageTransport.Sd };
         var snapshot = new StorageSnapshot(StorageProtocol.Major, StorageProtocol.Minor, DateTimeOffset.UtcNow,
             [disk],
             [new StorageVolume("local-volume-id", "private-label", "NTFS", StorageVolumeKind.Local,
                 [@"C:\Users\Person\Mount"], Metric<long>.Available(1024, "test"),
-                Metric<long>.Available(512, "test"), Metric<long>.Available(512, "test"), [disk.Id], null)], []);
+                Metric<long>.Available(512, "test"), Metric<long>.Available(512, "test"), [disk.Id], null, "local-only-mount-fingerprint")], []);
 
         var remote = RemoteTelemetrySanitizer.Snapshot(snapshot, "https://one.example", identity);
         var json = JsonSerializer.Serialize(remote, StorageContractJson.Options);
         Assert.Empty(Assert.Single(remote.Volumes).MountPoints);
         Assert.Null(Assert.Single(remote.Volumes).Label);
+        Assert.Null(Assert.Single(remote.Volumes).LocalMountFingerprint);
+        Assert.Equal(StorageTransport.Other, Assert.Single(remote.Disks).Transport);
+        Assert.DoesNotContain("local-only-mount-fingerprint", json, StringComparison.Ordinal);
         Assert.NotEqual(disk.Id, Assert.Single(remote.Disks).Id);
         Assert.Null(Assert.Single(remote.Disks).DeviceNumber);
         Assert.DoesNotContain("C:\\Users\\Person", json, StringComparison.OrdinalIgnoreCase);

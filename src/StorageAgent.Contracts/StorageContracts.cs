@@ -19,7 +19,7 @@ public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refr
 public enum MetricStatus { Available, Unavailable, Unsupported, Error }
 public enum StorageHealth { Healthy, Degraded, Critical, Unavailable, Unknown }
 public enum StorageTechnology { Hdd, Ssd, Nvme, Scm, Unknown }
-public enum StorageTransport { Ata, Sata, Scsi, Nvme, Usb, Raid, Sas, Virtual, Other, Unknown }
+public enum StorageTransport { Ata, Sata, Scsi, Nvme, Usb, Raid, Sas, Virtual, Other, Unknown, FireWire, Sd, Mmc }
 public enum StorageIdentityConfidence { HardwareId, DeviceInstance, SessionOnly }
 public enum StorageVolumeKind { Local, Removable, Network, Optical, Unknown }
 public enum StorageChangeKind { DeviceArrived, DeviceRemoved, HealthChanged, MetricsChanged }
@@ -96,7 +96,8 @@ public sealed record StorageVolume(
     Metric<long> FreeBytes,
     Metric<long> UsedBytes,
     IReadOnlyList<string> PhysicalDiskIds,
-    string? Diagnostic);
+    string? Diagnostic,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LocalMountFingerprint = null);
 
 public sealed record StorageSnapshot(
     int ContractMajor,
