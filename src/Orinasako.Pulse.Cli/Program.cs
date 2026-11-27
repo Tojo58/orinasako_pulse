@@ -74,8 +74,7 @@ try
         case "status" when args.Length == 1:
         {
             var status = await client.GetStatusAsync();
-            var connections = await client.ListConnectionsAsync();
-            Console.WriteLine($"Service: {(status.Ready ? "ready" : "starting")}; version {status.ServiceVersion}; local inventory {status.LastInventoryAt.ToLocalTime():u}; remote connections {connections.Count}.");
+            Console.WriteLine($"Service: {(status.Ready ? "ready" : "starting")}; version {status.ServiceVersion}; local inventory {status.LastInventoryAt.ToLocalTime():u}.");
             if (status.LastError is not null) Console.WriteLine($"Last local collector error: {status.LastError}");
             break;
         }

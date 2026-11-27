@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Security;
 using System.Security.Principal;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -139,7 +140,7 @@ internal sealed class NamedPipeServer(
             return;
         }
 
-        if (StorageProtocol.RequiresAdministrator(request.Operation) && !IsAdministrator(pipe))
+        if (StorageProtocol.RequiresAdministrator(request.Operation) && !CanRunAdministratorOperation(pipe))
         {
             await WriteFrameAsync(pipe, StorageContractJson.Failure(request.RequestId, "access.administrator_required",
                 "Run this Orinasako Pulse command from an elevated Administrator session."), token);
@@ -231,6 +232,19 @@ internal sealed class NamedPipeServer(
             isAdministrator = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
         });
         return isAdministrator;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private bool CanRunAdministratorOperation(NamedPipeServerStream pipe)
+    {
+        try { return IsAdministrator(pipe); }
+        catch (Exception error) when (error is SecurityException or Win32Exception or IOException or
+                                      InvalidOperationException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("Named pipe administrator authorization failed closed ({Type}, 0x{HResult:X8}).",
+                error.GetType().Name, error.HResult);
+            return false;
+        }
     }
 
     private StorageResponse Diagnostics(StorageRequest request)
