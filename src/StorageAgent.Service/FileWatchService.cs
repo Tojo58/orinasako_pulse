@@ -127,6 +127,7 @@ internal sealed class FileWatchService : BackgroundService
             await Parallel.ForEachAsync(due, new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = token },
                 async (item, ct) =>
                 {
+                    var upper = UsnCheckpoint.Read(item.Watch.Root);
                     FileInventory inventory;
                     try { inventory = await FileInventoryWorker.ScanAsync(item.Watch.Root, ct); }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -135,7 +136,11 @@ internal sealed class FileWatchService : BackgroundService
                         logger.LogWarning("Filesystem inventory unavailable ({Type}).", error.GetType().Name);
                         inventory = new(item.Watch.Root, false, [], [item.Watch.Root]);
                     }
-                    try { store.Commit(item.Watch, inventory); }
+                    try
+                    {
+                        var recovery = inventory.Complete ? UsnCheckpoint.Recover(item.Watch.Root, item.Watch.UsnPosition, upper) : null;
+                        store.Commit(item.Watch, inventory, recovery);
+                    }
                     catch (Exception error)
                     {
                         logger.LogWarning("Filesystem journal commit failed ({Type}).", error.GetType().Name);
