@@ -3,8 +3,14 @@ name: Storage Agent CI
 on:
   pull_request:
   push:
-    branches: [dev, main]
+    branches: [dev, main, 'release/v*']
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the exact version from Directory.Build.props'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,24 +31,85 @@ jobs:
         run: dotnet test StorageAgent.slnx --configuration Release --no-build --no-restore
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v') || (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/dev')
     needs: validate
     runs-on: windows-latest
+    timeout-minutes: 120
+    concurrency:
+      group: storage-agent-publication
+      cancel-in-progress: false
     permissions:
       contents: write
+      actions: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Restore
-        run: dotnet restore StorageAgent.slnx
+      - name: Validate release identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw "Invalid release version." }
+          $tag = "v$version"
+          if ($env:GITHUB_REF -like 'refs/tags/*' -and $env:GITHUB_REF_NAME -ne $tag) { throw "Tag and project version differ." }
+          if ($env:GITHUB_REF -like 'refs/heads/release/*' -and $env:GITHUB_REF_NAME -ne "release/$tag") { throw "Release branch and project version differ." }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Release already exists. Do not overwrite a published version." }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
       - name: Publish Windows service payload
         run: dotnet publish src/StorageAgent.Service/StorageAgent.Service.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/payload
       - name: Publish CLI into service payload
         run: dotnet publish src/StorageAgent.Cli/StorageAgent.Cli.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/payload
       - name: Publish installer
         run: dotnet publish src/StorageAgent.Installer/StorageAgent.Installer.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/package/installer
+      - name: Prepare signing inputs
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts/package -Recurse -Filter '*.pdb' | Remove-Item -Force
+          Copy-Item LICENSE -Destination artifacts/package/payload/StorageAgent-LICENSE.txt
+      - name: Upload unsigned payload for signing
+        if: vars.SIGNPATH_ENABLED == 'true'
+        id: unsigned_payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-storage-agent-payload
+          path: artifacts/package/
+          if-no-files-found: error
+      - name: Sign service, CLI and installer payload
+        if: vars.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_PAYLOAD_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned_payload.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 5400
+          output-artifact-directory: artifacts/signed-payload
+      - name: Verify and adopt signed payload
+        if: vars.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        env:
+          EXPECTED_THUMBPRINT: ${{ vars.SIGNPATH_CERT_THUMBPRINT }}
+        run: |
+          if ($env:EXPECTED_THUMBPRINT -notmatch '^[A-Fa-f0-9]{40}$') { throw "Configure the approved signer certificate thumbprint." }
+          foreach ($relative in @('payload/StorageAgent.Service.exe', 'payload/storageagent.exe', 'installer/StorageAgent.Installer.exe')) {
+            & ./scripts/assert-authenticode.ps1 -Path (Join-Path artifacts/signed-payload $relative) -Thumbprint $env:EXPECTED_THUMBPRINT
+          }
+          Get-ChildItem artifacts/signed-payload -Recurse -File | Where-Object { $_.Name -like 'StorageAgent.*.dll' -or $_.Name -eq 'storageagent.dll' } | ForEach-Object {
+            & ./scripts/assert-authenticode.ps1 -Path $_.FullName -Thumbprint $env:EXPECTED_THUMBPRINT
+          }
+          Remove-Item artifacts/package -Recurse -Force
+          Move-Item artifacts/signed-payload artifacts/package
       - name: Pack local SDK packages
         run: |
           dotnet pack src/StorageAgent.Contracts/StorageAgent.Contracts.csproj --configuration Release --output artifacts/package/nuget
@@ -51,18 +118,90 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis --yes --no-progress
-          [xml]$props = Get-Content Directory.Build.props
-          $version = $props.Project.PropertyGroup.Version
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag and project version differ." }
           $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          & $nsis "/DAPP_VERSION=$version" scripts/package.nsi
+          & $nsis "/DAPP_VERSION=$env:RELEASE_VERSION" scripts/package.nsi
           if ($LASTEXITCODE -ne 0) { throw "NSIS packaging failed." }
-      - name: Prepare release bundle
+          New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
+          Move-Item "StorageAgent-Setup-$env:RELEASE_VERSION-win-x64.exe" artifacts/release/
+      - name: Upload setup for signing
+        if: vars.SIGNPATH_ENABLED == 'true'
+        id: unsigned_setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-storage-agent-setup
+          path: artifacts/release/*.exe
+          if-no-files-found: error
+      - name: Sign standalone setup
+        if: vars.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned_setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 5400
+          output-artifact-directory: artifacts/signed-setup
+      - name: Adopt verified signed setup
+        if: vars.SIGNPATH_ENABLED == 'true'
         shell: pwsh
+        env:
+          EXPECTED_THUMBPRINT: ${{ vars.SIGNPATH_CERT_THUMBPRINT }}
+        run: |
+          $name = "StorageAgent-Setup-$env:RELEASE_VERSION-win-x64.exe"
+          & ./scripts/assert-authenticode.ps1 -Path "artifacts/signed-setup/$name" -Thumbprint $env:EXPECTED_THUMBPRINT
+          Copy-Item "artifacts/signed-setup/$name" "artifacts/release/$name" -Force
+      - name: Test standalone installation and reuse
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path "artifacts/release/StorageAgent-Setup-$env:RELEASE_VERSION-win-x64.exe").Path
+          try {
+            foreach ($attempt in 1..2) {
+              $process = Start-Process -FilePath $setup -ArgumentList '/S' -PassThru -Wait
+              if ($process.ExitCode -ne 0) { throw "Setup failed ($($process.ExitCode))." }
+              if ((Get-Service StorageAgent).Status -ne 'Running') { throw "Storage Agent service is not running." }
+              $cli = Join-Path $env:ProgramFiles 'Storage Health Agent/storageagent.exe'
+              & $cli status
+              if ($LASTEXITCODE -ne 0) { throw "Local IPC is not ready." }
+            }
+          } finally {
+            & artifacts/package/installer/StorageAgent.Installer.exe uninstall --remove-data
+            if ($LASTEXITCODE -ne 0) { throw "CI cleanup failed." }
+          }
+      - name: Prepare release bundle and integrity metadata
+        shell: pwsh
+        env:
+          SIGNPATH_ENABLED: ${{ vars.SIGNPATH_ENABLED }}
         run: |
           Copy-Item README.md, LICENSE -Destination artifacts/package
           Copy-Item docs -Destination artifacts/package/docs -Recurse
-          Compress-Archive -Path artifacts/package/* -DestinationPath "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip"
+          Compress-Archive -Path artifacts/package/* -DestinationPath "artifacts/release/StorageAgent-$env:RELEASE_TAG-win-x64.zip"
+          $setup = Get-Item "artifacts/release/StorageAgent-Setup-$env:RELEASE_VERSION-win-x64.exe"
+          $signature = Get-AuthenticodeSignature -LiteralPath $setup.FullName
+          if ($env:SIGNPATH_ENABLED -eq 'true' -and $signature.Status -ne 'Valid') { throw "Signed release required." }
+          $mode = if ($signature.Status -eq 'Valid') { 'signed' } else { 'none' }
+          $thumbprint = if ($mode -eq 'signed') { $signature.SignerCertificate.Thumbprint } else { '' }
+          $metadata = [ordered]@{
+            schemaVersion = 1; product = 'storage-agent'; version = $env:RELEASE_VERSION; sourceSha = $env:GITHUB_SHA;
+            filename = $setup.Name; size = $setup.Length; sha256 = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant();
+            authenticode = [ordered]@{ mode = $mode; thumbprint = $thumbprint }
+          }
+          $metadata | ConvertTo-Json -Depth 5 | Set-Content artifacts/release/storage-agent-release.json -Encoding utf8NoBOM
+          Get-ChildItem artifacts/release -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          } | Set-Content artifacts/release/SHA256SUMS.txt -Encoding utf8NoBOM
+      - name: Attest official release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/release/*
+      - name: Preserve tested deliverables
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-agent-release-${{ env.RELEASE_VERSION }}
+          path: artifacts/release/
+          if-no-files-found: error
       - name: Publish NuGet packages when a publisher key is configured
         shell: pwsh
         env:
@@ -71,10 +210,18 @@ jobs:
           if (-not [string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
             Get-ChildItem artifacts/package/nuget/*.nupkg | ForEach-Object {
               dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+              if ($LASTEXITCODE -ne 0) { throw "NuGet publication failed." }
             }
           }
-      - name: Publish GitHub release bundle
+      - name: Publish public immutable version
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME "StorageAgent-$env:GITHUB_REF_NAME-win-x64.zip" "StorageAgent-Setup-$($env:GITHUB_REF_NAME.Substring(1))-win-x64.exe" --generate-notes
+        run: |
+          $metadata = Get-Content artifacts/release/storage-agent-release.json | ConvertFrom-Json
+          $note = if ($metadata.authenticode.mode -eq 'signed') { 'Authenticode-signed Windows release.' } else { 'Unsigned Windows release: verify the GitHub build provenance and SHA-256 before installation. Windows may display a publisher warning.' }
+          $assets = @(Get-ChildItem artifacts/release -File | ForEach-Object { $_.FullName })
+          gh release create $env:RELEASE_TAG --target $env:GITHUB_SHA --title "Storage Agent $env:RELEASE_VERSION" --notes $note --draft @assets
+          if ($LASTEXITCODE -ne 0) { throw "Draft release upload failed." }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw "Publication failed." }

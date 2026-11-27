@@ -61,3 +61,7 @@ Raw disk serials and Windows paths are used only during local mapping. The local
 ## Standalone Windows setup
 
 The optional NSIS script at `scripts/package.nsi` creates a self-contained setup from the published `artifacts/package/payload` and `artifacts/package/installer` directories. Pass `-DAPP_VERSION=<version>` matching `Directory.Build.props`. The setup invokes `ensure` and does not downgrade or remove an already shared engine. The consumer may independently authenticate a published setup with its own distribution trust policy. No application-specific server is required by the agent.
+
+## Public Windows releases
+
+Download the standalone installer from [GitHub Releases](https://github.com/Tojo58/orinasako_storage_agent/releases). See [release and Authenticode policy](docs/releases.md) for verification, automated publication and optional signing. No Orinasako account is required. An unsigned release is not a signed Windows publisher identity.
