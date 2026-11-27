@@ -12,6 +12,7 @@
     <ProjectReference Include="../StorageAgent.Collectors/StorageAgent.Collectors.csproj" />
     <ProjectReference Include="../StorageAgent.Transport/StorageAgent.Transport.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <PackageReference Include="System.Management" Version="10.0.13" />
   </ItemGroup>
 </Project>

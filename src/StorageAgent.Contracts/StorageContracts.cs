@@ -15,7 +15,7 @@ public static class StorageProtocol
          StorageOperation.ResolvePath or StorageOperation.Subscribe);
 }
 
-public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport }
+public enum StorageOperation { Status, Inventory, Diagnostics, ResolvePath, Refresh, Subscribe, Connect, ConnectionsList, Disconnect, Sync, Logs, SystemReport, FileWatchConfigure, FileWatchStatus, FileInventoryPage, FileChanges, FileWatchRefresh }
 public enum MetricStatus { Available, Unavailable, Unsupported, Error }
 public enum StorageHealth { Healthy, Degraded, Critical, Unavailable, Unknown }
 public enum StorageTechnology { Hdd, Ssd, Nvme, Scm, Unknown }
@@ -133,7 +133,8 @@ public sealed record StorageRequest(
     string? ConnectionId = null,
     int? LogLines = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SystemCategory>? SystemCategories = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AllowStorage = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AllowStorage = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FileWatchRequest? FileWatch = null);
 
 public sealed record StorageResponse(
     int ContractMajor,

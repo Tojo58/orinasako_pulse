@@ -15,6 +15,7 @@ namespace StorageAgent.Service;
 
 internal sealed class NamedPipeServer(
     StorageRuntimeState state,
+    FileWatchService files,
     SystemRuntimeState systemState,
     StorageChangeHub changes,
     IStorageCollector collector,
@@ -144,6 +145,11 @@ internal sealed class NamedPipeServer(
             }
             response = request.Operation switch
             {
+                StorageOperation.FileWatchConfigure => StorageContractJson.Success(request.RequestId, files.Configure(request.FileWatch)),
+                StorageOperation.FileWatchStatus => StorageContractJson.Success(request.RequestId, files.Status(request.FileWatch)),
+                StorageOperation.FileInventoryPage => StorageContractJson.Success(request.RequestId, files.Page(request.FileWatch)),
+                StorageOperation.FileChanges => StorageContractJson.Success(request.RequestId, files.Changes(request.FileWatch)),
+                StorageOperation.FileWatchRefresh => StorageContractJson.Success(request.RequestId, files.Refresh(request.FileWatch)),
                 StorageOperation.Status => StorageContractJson.Success(request.RequestId, state.Status(ServiceVersion)),
                 StorageOperation.Inventory => StorageContractJson.Success(request.RequestId, state.Snapshot),
                 StorageOperation.SystemReport => StorageContractJson.Success(request.RequestId, new SystemReport(state.Snapshot, systemState.Snapshot())),

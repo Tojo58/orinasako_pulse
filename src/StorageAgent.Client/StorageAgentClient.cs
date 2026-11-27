@@ -77,18 +77,29 @@ public sealed class StorageAgentClient(TimeSpan? defaultTimeout = null)
     public Task<IReadOnlyList<string>> GetLogsAsync(int lines = 50, CancellationToken token = default) =>
         SendAsync<IReadOnlyList<string>>(StorageOperation.Logs, logLines: lines, token: token);
 
+    public Task<bool> ConfigureFileWatchesAsync(string consumer, IReadOnlyList<string> roots, CancellationToken token = default) =>
+        SendAsync<bool>(StorageOperation.FileWatchConfigure, token: token, fileWatch: new(consumer, roots));
+    public Task<IReadOnlyList<FileWatchStatus>> GetFileWatchStatusAsync(string consumer, CancellationToken token = default) =>
+        SendAsync<IReadOnlyList<FileWatchStatus>>(StorageOperation.FileWatchStatus, token: token, fileWatch: new(consumer));
+    public Task<FileInventoryPage> GetFileInventoryPageAsync(string consumer, string root, long revision, int offset, CancellationToken token = default) =>
+        SendAsync<FileInventoryPage>(StorageOperation.FileInventoryPage, token: token, fileWatch: new(consumer, Root: root, Revision: revision, Offset: offset));
+    public Task<FileChangePage> GetFileChangesAsync(string consumer, string root, long cursor, CancellationToken token = default) =>
+        SendAsync<FileChangePage>(StorageOperation.FileChanges, token: token, fileWatch: new(consumer, Root: root, Cursor: cursor));
+    public Task<bool> RefreshFileWatchAsync(string consumer, string root, CancellationToken token = default) =>
+        SendAsync<bool>(StorageOperation.FileWatchRefresh, token: token, fileWatch: new(consumer, Root: root));
+
     private async Task<T> SendAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null, FileWatchRequest? fileWatch = null)
     {
         var result = await SendNullableAsync<T>(operation, deviceId, path, force, waitSeconds, timeout, token,
-            serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage);
+            serverUrl, enrollmentCode, connectionId, logLines, systemCategories, allowStorage, fileWatch);
         return result ?? throw new StorageAgentException("response.empty_payload", "The Storage Agent returned an empty response.");
     }
 
     private async Task<T?> SendNullableAsync<T>(StorageOperation operation, string? deviceId = null, string? path = null,
         bool force = false, int? waitSeconds = null, TimeSpan? timeout = null, CancellationToken token = default,
-        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null)
+        string? serverUrl = null, string? enrollmentCode = null, string? connectionId = null, int? logLines = null, IReadOnlyList<SystemCategory>? systemCategories = null, bool? allowStorage = null, FileWatchRequest? fileWatch = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Storage Agent named pipes are available only on Windows.");
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);

@@ -91,7 +91,7 @@ internal static class ServiceInstaller
         if (!File.Exists(sourceService)) throw new FileNotFoundException("Service executable is missing from the installer payload.", sourceService);
         Directory.CreateDirectory(InstallDirectory);
         Directory.CreateDirectory(DataDirectory);
-        SetProtectedDirectoryAcl(InstallDirectory);
+        SetProtectedDirectoryAcl(InstallDirectory, allowExecute: true);
         SetProtectedDirectoryAcl(DataDirectory);
         StopIfInstalled();
         CopyFiles(sourceDirectory, InstallDirectory);
@@ -247,9 +247,9 @@ internal static class ServiceInstaller
         return handle;
     }
 
-    private static void SetProtectedDirectoryAcl(string directory)
+    private static void SetProtectedDirectoryAcl(string directory, bool allowExecute = false)
     {
-        const string sddl = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        var sddl = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" + (allowExecute ? "(A;OICI;GRGX;;;AU)" : "");
         if (!ConvertStringSecurityDescriptorToSecurityDescriptor(sddl, 1, out var descriptor, out _))
             throw new Win32Exception(Marshal.GetLastWin32Error());
         try

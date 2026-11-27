@@ -4,6 +4,21 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StorageAgent.Core;
 using StorageAgent.Service;
+using StorageAgent.Contracts;
+using System.Text.Json;
+
+if (args.Length == 3 && args[0] == "--filesystem-inventory")
+{
+    try
+    {
+        var result = FileSystemInventory.Scan(args[1]);
+        await using var output = new FileStream(args[2], FileMode.Truncate, FileAccess.Write, FileShare.None);
+        await JsonSerializer.SerializeAsync(output, result, StorageContractJson.Options);
+    }
+    catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+    { Environment.ExitCode = 1; }
+    return;
+}
 
 var builder = Host.CreateApplicationBuilder(args);
 var fileLogger = new StorageFileLoggerProvider();
@@ -31,5 +46,7 @@ builder.Services.AddSingleton<RemoteProtocolClient>();
 builder.Services.AddSingleton<RemoteConnectionManager>();
 builder.Services.AddHostedService<StorageMonitorService>();
 builder.Services.AddHostedService<RemoteSyncService>();
+builder.Services.AddSingleton<FileWatchService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<FileWatchService>());
 builder.Services.AddHostedService<NamedPipeServer>();
 await builder.Build().RunAsync();
