@@ -10,8 +10,8 @@ The installer can also be signed by another approved code-signing provider, but 
 
 ## Consuming a release
 
-Verify the official binary at build time with `gh attestation verify <setup.exe> --repo Tojo58/orinasako_storage_agent --signer-workflow Tojo58/orinasako_storage_agent/.github/workflows/ci.yml`. Pin its SHA-256 and version in the consumer installer. A hash fetched from the same download server at installation time is not a substitute for an embedded trusted digest or a signed manifest. The metadata JSON describes the published binary; it is not an RSA-signed update manifest. Consumers may maintain independent update trust roots. No Orinasako credentials or remote services are necessary to install Orinasako Pulse.
+Verify the official binary at build time with `gh attestation verify <setup.exe> --repo Tojo58/orinasako_pulse --signer-workflow Tojo58/orinasako_pulse/.github/workflows/ci.yml`. Pin its SHA-256 and version in the consumer installer. A hash fetched from the same download server at installation time is not a substitute for an embedded trusted digest or a signed manifest. The metadata JSON describes the published binary; it is not an RSA-signed update manifest. Consumers may maintain independent update trust roots. No Orinasako credentials or remote services are necessary to install Orinasako Pulse.
 
 ## Rename and compatibility
 
-Orinasako Pulse is the product identity from 2.0.0. The GitHub repository retains its historical slug until the owner renames it. The existing wire protocol, persistent directory `StorageAgent` and DPAPI entropy are kept stable for compatibility. The Windows service becomes `OrinasakoPulse`; the installer retires the old registration after successful start. Validate migration on Windows before production.
+Orinasako Pulse is the product identity from 2.0.0. The canonical public repository is `Tojo58/orinasako_pulse`. The existing wire protocol, persistent directory `StorageAgent` and DPAPI entropy are kept stable for compatibility. The Windows service becomes `OrinasakoPulse`; the installer retires the old registration after successful start. Validate migration on Windows before production.

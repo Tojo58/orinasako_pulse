@@ -64,4 +64,4 @@ The optional NSIS script at `scripts/package.nsi` creates a self-contained setup
 
 ## Public Windows releases
 
-Download the standalone installer from [GitHub Releases](https://github.com/Tojo58/orinasako_storage_agent/releases). See [release and Authenticode policy](docs/releases.md) for verification, automated publication and optional signing. No Orinasako account is required. An unsigned release is not a signed Windows publisher identity.
+Download the standalone installer from [GitHub Releases](https://github.com/Tojo58/orinasako_pulse/releases). See [release and Authenticode policy](docs/releases.md) for verification, automated publication and optional signing. No Orinasako account is required. An unsigned release is not a signed Windows publisher identity.
