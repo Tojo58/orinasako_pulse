@@ -15,6 +15,8 @@ internal sealed class FileWatchService : BackgroundService
         public FileSystemWatcher? Watcher;
         public DateTimeOffset LastScan;
         public string? Usn;
+        public DateTimeOffset LastUsnCheck;
+        public int Scanning;
         public int Dirty = 1;
         public void Dispose() => Watcher?.Dispose();
     }
@@ -54,12 +56,26 @@ internal sealed class FileWatchService : BackgroundService
         store.Configure(consumer, roots);
         return true;
     }
-    public IReadOnlyList<FileWatchStatus> Status(FileWatchRequest? request) => store.Status(Consumer(request));
+    public IReadOnlyList<FileWatchStatus> Status(FileWatchRequest? request)
+    {
+        var consumer = Consumer(request);
+        return store.Status(consumer).Select(status => Visible(consumer, status)).ToArray();
+    }
+
+    private FileWatchStatus Visible(string consumer, FileWatchStatus status)
+    {
+        if (!observations.TryGetValue((consumer, status.Root), out var observation) ||
+            Volatile.Read(ref observation.Dirty) != 0 || Volatile.Read(ref observation.Scanning) != 0)
+            return status with { Complete = false };
+        return status;
+    }
     public FileInventoryPage Page(FileWatchRequest? request)
     {
         if (request is null || request.Offset is < 0 or > FileSystemInventory.MaxEntries || request.Revision < 0)
             throw new InvalidDataException("Invalid inventory cursor.");
-        return store.Page(Consumer(request), Root(request), request.Revision, request.Offset);
+        var consumer = Consumer(request);
+        var page = store.Page(consumer, Root(request), request.Revision, request.Offset);
+        return page with { Status = Visible(consumer, page.Status) };
     }
     public FileChangePage Changes(FileWatchRequest? request)
     {
@@ -93,13 +109,20 @@ internal sealed class FileWatchService : BackgroundService
                     Attach(watch.Root, observation);
                 // USN detects lost watcher notifications and journal replacement on NTFS.
                 // Non-NTFS/SMB and restart always use a bounded full reconciliation.
-                var usn = FileSystemInventory.IsNetwork(watch.Root) ? null : UsnCheckpoint.Read(watch.Root);
-                if (usn is not null && observation.Usn is not null && usn != observation.Usn)
-                    Interlocked.Exchange(ref observation.Dirty, 1);
-                observation.Usn = usn;
+                if (DateTimeOffset.UtcNow - observation.LastUsnCheck >= TimeSpan.FromSeconds(30))
+                {
+                    var usn = FileSystemInventory.IsNetwork(watch.Root) ? null : UsnCheckpoint.Read(watch.Root);
+                    if (usn is not null && observation.Usn is not null && usn != observation.Usn)
+                        Interlocked.Exchange(ref observation.Dirty, 1);
+                    observation.Usn = usn;
+                    observation.LastUsnCheck = DateTimeOffset.UtcNow;
+                }
                 if (Interlocked.Exchange(ref observation.Dirty, 0) != 0 ||
                     DateTimeOffset.UtcNow - observation.LastScan >= TimeSpan.FromMinutes(1))
+                {
+                    Volatile.Write(ref observation.Scanning, 1);
                     due.Add((watch, observation));
+                }
             }
             await Parallel.ForEachAsync(due, new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = token },
                 async (item, ct) =>
@@ -113,8 +136,14 @@ internal sealed class FileWatchService : BackgroundService
                         inventory = new(item.Watch.Root, false, [], [item.Watch.Root]);
                     }
                     try { store.Commit(item.Watch, inventory); }
-                    catch (Exception error) { logger.LogWarning("Filesystem journal commit failed ({Type}).", error.GetType().Name); }
+                    catch (Exception error)
+                    {
+                        logger.LogWarning("Filesystem journal commit failed ({Type}).", error.GetType().Name);
+                        try { store.Commit(item.Watch, new(item.Watch.Root, false, [], [item.Watch.Root])); }
+                        catch (Exception) { Interlocked.Exchange(ref item.Observation.Dirty, 1); }
+                    }
                     item.Observation.LastScan = DateTimeOffset.UtcNow;
+                    Volatile.Write(ref item.Observation.Scanning, 0);
                 });
             await Task.Delay(TimeSpan.FromSeconds(2), token);
         }

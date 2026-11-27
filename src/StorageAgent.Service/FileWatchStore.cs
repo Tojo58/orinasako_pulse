@@ -10,9 +10,9 @@ internal sealed class FileWatchStore : IDisposable
     private readonly SqliteConnection db;
     private const int Retention = 10_000;
     private const int PageSize = 24;
-    internal record Watch(string Consumer, string Root, long Revision, bool Complete, DateTimeOffset Observed, long Cursor)
+    internal record Watch(string Consumer, string Root, long Revision, bool Complete, DateTimeOffset Observed, long Cursor, bool Offline, string? Principal)
     {
-        public FileWatchStatus Status => new(Root, Revision, Complete, Observed, Cursor);
+        public FileWatchStatus Status => new(Root, Revision, Complete, Observed, Cursor, Offline);
     }
 
     public FileWatchStore(string path)
@@ -27,7 +27,7 @@ internal sealed class FileWatchStore : IDisposable
                 consumer TEXT NOT NULL, root TEXT COLLATE NOCASE NOT NULL,
                 revision INTEGER NOT NULL DEFAULT 0, complete INTEGER NOT NULL DEFAULT 0,
                 observed TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00',
-                cursor INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(consumer,root));
+                cursor INTEGER NOT NULL DEFAULT 0, offline INTEGER NOT NULL DEFAULT 0, principal TEXT, PRIMARY KEY(consumer,root));
             CREATE TABLE IF NOT EXISTS entries(
                 consumer TEXT NOT NULL, root TEXT COLLATE NOCASE NOT NULL, path TEXT COLLATE NOCASE NOT NULL,
                 directory INTEGER NOT NULL, size INTEGER NOT NULL, modified TEXT NOT NULL, identity TEXT,
@@ -40,6 +40,17 @@ internal sealed class FileWatchStore : IDisposable
                 FOREIGN KEY(consumer,root) REFERENCES watches(consumer,root) ON DELETE CASCADE);
             """;
         command.ExecuteNonQuery();
+        EnsureColumn("offline", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn("principal", "TEXT");
+    }
+
+    private void EnsureColumn(string name, string definition)
+    {
+        using var info = Command("PRAGMA table_info(watches)");
+        using (var reader = info.ExecuteReader())
+            while (reader.Read()) if (reader.GetString(1) == name) return;
+        using var alter = Command("ALTER TABLE watches ADD COLUMN " + name + " " + definition);
+        alter.ExecuteNonQuery();
     }
 
     private SqliteCommand Command(string sql, SqliteTransaction? transaction = null, params (string Name, object? Value)[] parameters)
@@ -54,11 +65,11 @@ internal sealed class FileWatchStore : IDisposable
 
     private List<Watch> ReadWatches(string? consumer = null, SqliteTransaction? transaction = null)
     {
-        using var cmd = Command("SELECT consumer,root,revision,complete,observed,cursor FROM watches WHERE $consumer IS NULL OR consumer=$consumer ORDER BY consumer,root", transaction, ("$consumer", consumer));
+        using var cmd = Command("SELECT consumer,root,revision,complete,observed,cursor,offline,principal FROM watches WHERE $consumer IS NULL OR consumer=$consumer ORDER BY consumer,root", transaction, ("$consumer", consumer));
         using var reader = cmd.ExecuteReader();
         var result = new List<Watch>();
         while (reader.Read()) result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetInt64(2),
-            reader.GetBoolean(3), DateTimeOffset.Parse(reader.GetString(4)), reader.GetInt64(5)));
+            reader.GetBoolean(3), DateTimeOffset.Parse(reader.GetString(4)), reader.GetInt64(5), reader.GetBoolean(6), reader.IsDBNull(7) ? null : reader.GetString(7)));
         return result;
     }
     public IReadOnlyList<Watch> All() { lock (gate) return ReadWatches(); }
@@ -126,7 +137,7 @@ internal sealed class FileWatchStore : IDisposable
             var watch = Find(consumer, root);
             if (cursor > watch.Cursor || cursor < Math.Max(0, watch.Cursor - Retention))
                 return new(watch.Cursor, true, []);
-            using var cmd = Command("SELECT sequence,kind,path,old_path,observed FROM changes WHERE consumer=$c AND root=$r AND sequence>$cursor ORDER BY sequence LIMIT 24",
+            using var cmd = Command("SELECT sequence,kind,path,old_path,observed FROM changes WHERE consumer=$c AND root=$r AND sequence>$cursor ORDER BY sequence LIMIT 12",
                 null, ("$c", consumer), ("$r", root), ("$cursor", cursor));
             using var reader = cmd.ExecuteReader();
             var result = new List<FileChange>();
@@ -143,6 +154,10 @@ internal sealed class FileWatchStore : IDisposable
             using var tx = db.BeginTransaction();
             var watch = ReadWatches(requested.Consumer, tx).SingleOrDefault(w => w.Root.Equals(requested.Root, StringComparison.OrdinalIgnoreCase));
             if (watch is null) return;
+            if (watch.Principal is not null && watch.Principal != inventory.PrincipalKey)
+                inventory = new(watch.Root, false, [], [watch.Root]);
+            var offline = !inventory.Complete && inventory.Entries.Count == 0 &&
+                inventory.Inaccessible.Contains(watch.Root, StringComparer.OrdinalIgnoreCase);
             var now = DateTimeOffset.UtcNow;
             var cursor = watch.Cursor;
             var revision = watch.Revision;
@@ -188,9 +203,9 @@ internal sealed class FileWatchStore : IDisposable
                     }
                 }
             }
-            else if (watch.Complete || revision == 0) revision++;
-            using var status = Command("UPDATE watches SET revision=$v,complete=$ok,observed=$t,cursor=$s WHERE consumer=$c AND root=$r", tx,
-                ("$v", revision), ("$ok", inventory.Complete), ("$t", Timestamp(now)), ("$s", cursor), ("$c", watch.Consumer), ("$r", watch.Root));
+            else if (watch.Complete || revision == 0 || watch.Offline != offline) revision++;
+            using var status = Command("UPDATE watches SET revision=$v,complete=$ok,observed=$t,cursor=$s,offline=$off,principal=COALESCE(principal,$principal) WHERE consumer=$c AND root=$r", tx,
+                ("$v", revision), ("$ok", inventory.Complete), ("$t", Timestamp(now)), ("$s", cursor), ("$off", offline), ("$principal", inventory.Complete ? inventory.PrincipalKey : null), ("$c", watch.Consumer), ("$r", watch.Root));
             status.ExecuteNonQuery();
             tx.Commit();
         }

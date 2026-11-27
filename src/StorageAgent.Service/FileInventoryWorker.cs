@@ -15,7 +15,7 @@ internal static class FileInventoryWorker
         try
         {
             // Use the active user's permissions even for local paths. Never fall back to SYSTEM.
-            child = InteractiveUserProcess.TryStart(executable, ["--filesystem-inventory", root, output], output)
+            child = InteractiveUserProcess.TryStart(executable, ["--filesystem-inventory", root, output], output, out var principalKey)
                 ?? throw new IOException("No active Windows session for filesystem inventory.");
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
             budget.CancelAfter(TimeSpan.FromMinutes(3));
@@ -28,7 +28,7 @@ internal static class FileInventoryWorker
             if (!result.Root.Equals(root, StringComparison.OrdinalIgnoreCase) || result.Entries.Count > FileSystemInventory.MaxEntries ||
                 result.Entries.Any(entry => !IsWithin(root, entry.Path)))
                 throw new InvalidDataException("Inventory worker returned invalid paths.");
-            return result;
+            return result with { PrincipalKey = principalKey };
         }
         finally
         {

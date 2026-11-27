@@ -52,6 +52,22 @@ public sealed class FileInventoryTests
     }
 
     [Fact]
+    public void ChangedWindowsPrincipalCannotDeleteAnotherUsersInventory()
+    {
+        using var store = new FileWatchStore(":memory:");
+        var root = Path.Combine(Path.GetTempPath(), "protected");
+        var file = new FileEntry(Path.Combine(root, "movie"), false, 1, DateTimeOffset.UtcNow);
+        store.Configure("consumer", [root]);
+        store.Commit(Assert.Single(store.All()), new(root, true, [file], [], "principal-A"));
+        store.Commit(Assert.Single(store.All()), new(root, true, [], [], "principal-B"));
+        var status = Assert.Single(store.Status("consumer"));
+        Assert.False(status.Complete);
+        Assert.True(status.Offline);
+        Assert.Single(store.Page("consumer", root, status.Revision, 0).Entries);
+        Assert.Empty(store.Changes("consumer", root, 0).Changes);
+    }
+
+    [Fact]
     public void FilesystemIpcIsAdministrativeAndNotRemote()
     {
         Assert.True(StorageProtocol.RequiresAdministrator(StorageOperation.FileWatchConfigure));

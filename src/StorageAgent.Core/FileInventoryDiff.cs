@@ -8,25 +8,25 @@ public static class FileInventoryDiff
     {
         var old = previous.ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
         var next = current.ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
-        var removed = old.Values.Where(e => !next.ContainsKey(e.Path)).ToList();
-        var added = next.Values.Where(e => !old.ContainsKey(e.Path)).ToList();
+        var removed = old.Values.Where(e => !next.ContainsKey(e.Path)).ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
+        var added = next.Values.Where(e => !old.ContainsKey(e.Path)).ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
         var result = new List<FileChange>();
         var oldUnique = previous.Where(e => e.Identity is not null).GroupBy(e => e.Identity!)
             .Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.Single());
         var newUnique = current.Where(e => e.Identity is not null).GroupBy(e => e.Identity!)
             .Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.Single());
-        foreach (var entry in removed.ToArray())
+        foreach (var entry in removed.Values.ToArray())
         {
             if (entry.Identity is null || !oldUnique.ContainsKey(entry.Identity) ||
-                !newUnique.TryGetValue(entry.Identity, out var replacement) || !added.Contains(replacement) ||
+                !newUnique.TryGetValue(entry.Identity, out var replacement) || !added.ContainsKey(replacement.Path) ||
                 entry.Directory != replacement.Directory) continue;
             var kind = string.Equals(Path.GetDirectoryName(entry.Path), Path.GetDirectoryName(replacement.Path), StringComparison.OrdinalIgnoreCase)
                 ? "renamed" : "moved";
             result.Add(new(0, kind, replacement.Path, entry.Path, now));
-            removed.Remove(entry); added.Remove(replacement);
+            removed.Remove(entry.Path); added.Remove(replacement.Path);
         }
-        result.AddRange(removed.Select(e => new FileChange(0, "deleted", e.Path, null, now)));
-        result.AddRange(added.Select(e => new FileChange(0, "created", e.Path, null, now)));
+        result.AddRange(removed.Values.Select(e => new FileChange(0, "deleted", e.Path, null, now)));
+        result.AddRange(added.Values.Select(e => new FileChange(0, "created", e.Path, null, now)));
         foreach (var entry in next.Values)
         {
             if (!old.TryGetValue(entry.Path, out var before)) continue;

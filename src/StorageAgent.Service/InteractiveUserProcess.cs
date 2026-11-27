@@ -109,8 +109,9 @@ internal static class InteractiveUserProcess
     private static extern IntPtr LocalFree(IntPtr memory);
 
     /// <returns>null when there is no active interactive user or this is not Windows.</returns>
-    public static Process? TryStart(string executable, IReadOnlyList<string> arguments, string outputPath)
+    public static Process? TryStart(string executable, IReadOnlyList<string> arguments, string outputPath, out string? principalKey)
     {
+        principalKey = null;
         if (!OperatingSystem.IsWindows()) return null;
 
         foreach (var sessionId in ActiveSessionIds())
@@ -118,7 +119,9 @@ internal static class InteractiveUserProcess
             if (!WTSQueryUserToken(sessionId, out var token)) continue;
             try
             {
-                GrantOutputFileToUser(outputPath, TokenSid(token));
+                var sid = TokenSid(token);
+                principalKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("filesystem-principal:" + sid)));
+                GrantOutputFileToUser(outputPath, sid);
                 return Start(token, executable, arguments);
             }
             finally
