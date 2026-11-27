@@ -74,7 +74,8 @@ internal sealed class NamedPipeServer(
                 // Keep the handle alive briefly while the client consumes the response.
                 using var drain = CancellationTokenSource.CreateLinkedTokenSource(serviceToken);
                 drain.CancelAfter(TimeSpan.FromSeconds(2));
-                try { await pipe.ReadAsync(new byte[1], drain.Token); }
+                try { await pipe.ReadExactlyAsync(new byte[1], drain.Token); }
+                catch (EndOfStreamException) { }
                 catch (OperationCanceledException) when (!serviceToken.IsCancellationRequested) { }
             }
         }
